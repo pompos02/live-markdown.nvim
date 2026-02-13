@@ -2,3 +2,4 @@
 lua/*.so
 lua/*.dll
 *c.md
+src/target/rust-analyzer/
