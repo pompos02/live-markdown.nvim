@@ -114,13 +114,11 @@ fn render_start_tag(
         }
         Tag::List(start) => {
             if let Some(start) = start {
-                out.push_str("<ol data-line=\"");
-                out.push_str(&line.to_string());
-                out.push_str("\" start=\"");
+                out.push_str("<ol start=\"");
                 out.push_str(&start.to_string());
                 out.push_str("\">");
             } else {
-                open_block_tag(out, "ul", line);
+                out.push_str("<ul>");
             }
         }
         Tag::Item => open_block_tag(out, "li", line),

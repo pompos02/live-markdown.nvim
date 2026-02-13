@@ -73,6 +73,15 @@
         font-size: 0.95rem;
       }
 
+      #md-root [data-line] {
+        border-radius: 3px;
+        transition: background-color 90ms linear, box-shadow 90ms linear;
+      }
+
+      #md-root .is-cursor-line {
+        background: rgba(170, 170, 170, 0.12);
+      }
+
       #md-root h1,
       #md-root h2,
       #md-root h3,
@@ -191,6 +200,37 @@
         border-top: 1px solid var(--border);
       }
 
+      #md-root input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border: 1.5px solid var(--text-muted);
+        border-radius: 3px;
+        background: var(--bg);
+        vertical-align: middle;
+        margin-right: 6px;
+        cursor: default;
+        position: relative;
+      }
+
+      #md-root input[type="checkbox"]:checked {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      #md-root input[type="checkbox"]:checked::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 4px;
+        height: 8px;
+        border: solid var(--bg);
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+
       .warning {
         margin-top: 10px;
         border-radius: 4px;
@@ -233,6 +273,8 @@
         const AUTO_SCROLL = __AUTO_SCROLL__;
         const COMFORT_TOP = Number("__SCROLL_TOP__");
         const COMFORT_BOTTOM = Number("__SCROLL_BOTTOM__");
+        const FOLLOW_RATIO = Math.max(0.05, Math.min(0.95, (COMFORT_TOP + COMFORT_BOTTOM) / 2));
+        const REDUCE_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
         const statusLine = document.getElementById("status-line");
         const warning = document.getElementById("warning");
@@ -241,8 +283,13 @@
         let currentArticle = document.getElementById("md-root");
         let lineAnchors = [];
         let latestCursorLine = null;
+        let activeLineElement = null;
         let manualScrollCooldownUntil = 0;
         let source = null;
+        let followTargetTop = null;
+        let followVelocity = 0;
+        let followFrame = 0;
+        let followLastTs = 0;
 
         const search = new URLSearchParams(window.location.search);
         const token = search.get("token");
@@ -537,11 +584,115 @@
           lineAnchors.sort((a, b) => a.line - b.line);
         }
 
+        function setActiveLine(line) {
+          const target = findClosestAnchor(line);
+
+          if (activeLineElement && activeLineElement !== target) {
+            activeLineElement.classList.remove("is-cursor-line");
+          }
+
+          activeLineElement = target;
+
+          if (activeLineElement) {
+            activeLineElement.classList.add("is-cursor-line");
+          }
+
+          return target;
+        }
+
+        function getScrollTop() {
+          return window.scrollY || document.documentElement.scrollTop || 0;
+        }
+
+        function getMaxScrollTop() {
+          return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        }
+
+        function clampScrollTop(value) {
+          return Math.max(0, Math.min(getMaxScrollTop(), value));
+        }
+
+        function stopFollowAnimation() {
+          if (followFrame !== 0) {
+            window.cancelAnimationFrame(followFrame);
+            followFrame = 0;
+          }
+          followLastTs = 0;
+          followVelocity = 0;
+        }
+
+        function stepFollow(ts) {
+          if (followTargetTop == null) {
+            stopFollowAnimation();
+            return;
+          }
+
+          if (followLastTs === 0) {
+            followLastTs = ts;
+          }
+
+          const dt = Math.max(0.5, Math.min(2, (ts - followLastTs) / 16.6667));
+          followLastTs = ts;
+
+          const currentTop = getScrollTop();
+          const distance = followTargetTop - currentTop;
+
+          followVelocity += distance * 0.15 * dt;
+          followVelocity *= Math.pow(0.72, dt);
+
+          const nextTop = clampScrollTop(currentTop + followVelocity * dt);
+          window.scrollTo({ top: nextTop, behavior: "auto" });
+
+          if (Math.abs(distance) < 0.45 && Math.abs(followVelocity) < 0.45) {
+            window.scrollTo({ top: clampScrollTop(followTargetTop), behavior: "auto" });
+            stopFollowAnimation();
+            return;
+          }
+
+          followFrame = window.requestAnimationFrame(stepFollow);
+        }
+
+        function animateToScrollTop(targetTop, force) {
+          const clampedTarget = clampScrollTop(targetTop);
+
+          if (force || REDUCE_MOTION) {
+            followTargetTop = clampedTarget;
+            stopFollowAnimation();
+            window.scrollTo({ top: clampedTarget, behavior: "auto" });
+            return;
+          }
+
+          followTargetTop = clampedTarget;
+          if (followFrame === 0) {
+            followFrame = window.requestAnimationFrame(stepFollow);
+          }
+        }
+
+        function targetTopForElement(target) {
+          const viewport = window.innerHeight || document.documentElement.clientHeight;
+          const absoluteTop = getScrollTop() + target.getBoundingClientRect().top;
+          return absoluteTop - viewport * FOLLOW_RATIO;
+        }
+
+        function targetTopByLineRatio(line) {
+          if (!lineAnchors.length) {
+            return getScrollTop();
+          }
+
+          const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
+          const ratio = Math.max(0, Math.min(1, line / maxLine));
+          return getMaxScrollTop() * ratio;
+        }
+
         function installHtml(html) {
           previewRoot.innerHTML = html;
           currentArticle = previewRoot.querySelector("#md-root") || previewRoot;
           applySyntaxHighlighting(currentArticle);
           updateAnchors();
+
+          if (latestCursorLine != null) {
+            setActiveLine(latestCursorLine);
+          }
         }
 
         function findClosestAnchor(line) {
@@ -573,49 +724,34 @@
           return lineAnchors[0].element;
         }
 
-        function proportionalFallback(line, force) {
-          if (!lineAnchors.length) {
+        function followCursorLine(line, force, allowDuplicate) {
+          if (!line) {
             return;
           }
 
-          const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
-          const ratio = Math.max(0, Math.min(1, line / maxLine));
-          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-          window.scrollTo({ top: maxScroll * ratio, behavior: force ? "auto" : "smooth" });
-        }
-
-        function scrollToCursorLine(line, force) {
-          if (!AUTO_SCROLL || !line) {
-            return;
-          }
-
-          if (!force && latestCursorLine === line) {
+          if (!force && !allowDuplicate && latestCursorLine === line) {
             return;
           }
 
           latestCursorLine = line;
+          const target = setActiveLine(line);
+
+          if (!AUTO_SCROLL) {
+            return;
+          }
 
           if (!force && performance.now() < manualScrollCooldownUntil) {
             return;
           }
 
-          const target = findClosestAnchor(line);
+          let targetTop;
           if (!target) {
-            proportionalFallback(line, force);
-            return;
+            targetTop = targetTopByLineRatio(line);
+          } else {
+            targetTop = targetTopForElement(target);
           }
 
-          const viewport = window.innerHeight || document.documentElement.clientHeight;
-          const topBand = viewport * COMFORT_TOP;
-          const bottomBand = viewport * COMFORT_BOTTOM;
-          const rect = target.getBoundingClientRect();
-
-          if (force || rect.top < topBand || rect.top > bottomBand) {
-            const desiredTop = viewport * 0.35;
-            const delta = rect.top - desiredTop;
-            const behavior = force ? "auto" : "smooth";
-            window.scrollBy({ top: delta, behavior });
-          }
+          animateToScrollTop(targetTop, force);
         }
 
         function readPayload(event) {
@@ -634,7 +770,7 @@
 
           const payload = await response.json();
           installHtml(payload.html || "<article id=\"md-root\"></article>");
-          scrollToCursorLine(payload.cursor_line, true);
+          followCursorLine(payload.cursor_line, true, true);
           setStatus(`Connected - buffer ${bufnr}`);
         }
 
@@ -653,7 +789,7 @@
 
             clearWarning();
             installHtml(payload.html || "<article id=\"md-root\"></article>");
-            scrollToCursorLine(payload.cursor_line, false);
+            followCursorLine(payload.cursor_line, false, true);
             setStatus(`Live - buffer ${bufnr}`);
           });
 
@@ -662,7 +798,7 @@
             if (!payload) {
               return;
             }
-            scrollToCursorLine(payload.line, false);
+            followCursorLine(payload.line, false, false);
           });
 
           source.addEventListener("session_end", (event) => {
@@ -700,7 +836,9 @@
         }
 
         function markManualScroll() {
-          manualScrollCooldownUntil = performance.now() + 420;
+          manualScrollCooldownUntil = performance.now() + 220;
+          followTargetTop = getScrollTop();
+          stopFollowAnimation();
         }
 
         window.addEventListener("wheel", markManualScroll, { passive: true });
