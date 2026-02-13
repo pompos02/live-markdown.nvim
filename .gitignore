@@ -1,0 +1,4 @@
+/target
+lua/*.so
+lua/*.dll
+*c.md

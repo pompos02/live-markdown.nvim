@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Markdown Render Preview</title>
+    <style>
+      :root {
+        --paper: #f6f1e8;
+        --ink: #21211e;
+        --accent: #7f4f24;
+        --edge: #d8ceb9;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+        background:
+          radial-gradient(circle at 15% 0%, #fff8ec 0%, #f6f1e8 48%),
+          linear-gradient(165deg, #fdf9f1 0%, #efe4cc 100%);
+      }
+
+      .shell {
+        max-width: 920px;
+        margin: 4vh auto 8vh;
+        padding: 18px 20px 36px;
+      }
+
+      .status-card {
+        border: 1px solid var(--edge);
+        background: rgba(255, 252, 246, 0.8);
+        border-radius: 14px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+        backdrop-filter: blur(5px);
+      }
+
+      .status-title {
+        margin: 0;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+      }
+
+      .status-line {
+        margin: 4px 0 0;
+        font-family: "IBM Plex Mono", "Courier New", monospace;
+        font-size: 0.9rem;
+      }
+
+      #preview-root {
+        border: 1px solid var(--edge);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.84);
+        padding: 26px 30px;
+        min-height: 72vh;
+        box-shadow: 0 20px 50px rgba(56, 38, 15, 0.08);
+      }
+
+      #md-root {
+        line-height: 1.62;
+        font-size: 1.05rem;
+      }
+
+      #md-root h1,
+      #md-root h2,
+      #md-root h3,
+      #md-root h4,
+      #md-root h5,
+      #md-root h6 {
+        line-height: 1.2;
+        margin-top: 1.4em;
+      }
+
+      #md-root code,
+      #md-root pre,
+      #md-root .mono {
+        font-family: "IBM Plex Mono", "Fira Mono", "Courier New", monospace;
+      }
+
+      #md-root pre {
+        border: 1px solid #d8d3c4;
+        background: #f5f2eb;
+        border-radius: 10px;
+        padding: 12px 14px;
+        overflow-x: auto;
+      }
+
+      #md-root table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      #md-root td,
+      #md-root th {
+        border: 1px solid #d8d3c4;
+        padding: 8px 10px;
+      }
+
+      .warning {
+        margin-top: 10px;
+        border-radius: 10px;
+        border: 1px solid #e2b2a1;
+        background: #fde8e1;
+        color: #6b2a1d;
+        padding: 8px 10px;
+        display: none;
+      }
+
+      @media (max-width: 900px) {
+        .shell {
+          margin: 0;
+          padding: 10px 10px 24px;
+        }
+
+        #preview-root {
+          padding: 18px 16px;
+          border-radius: 12px;
+          min-height: calc(100vh - 80px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="status-card">
+        <p class="status-title">Markdown Render</p>
+        <p id="status-line" class="status-line">Connecting...</p>
+      </section>
+      <section id="preview-root">
+        <article id="md-root">
+          <p data-line="1">Waiting for snapshot...</p>
+        </article>
+      </section>
+      <section id="warning" class="warning"></section>
+    </main>
+
+    <script>
+      (() => {
+        const AUTO_SCROLL = __AUTO_SCROLL__;
+        const COMFORT_TOP = Number("__SCROLL_TOP__");
+        const COMFORT_BOTTOM = Number("__SCROLL_BOTTOM__");
+
+        const statusLine = document.getElementById("status-line");
+        const warning = document.getElementById("warning");
+        const previewRoot = document.getElementById("preview-root");
+
+        let currentArticle = document.getElementById("md-root");
+        let lineAnchors = [];
+        let latestCursorLine = null;
+        let manualScrollCooldownUntil = 0;
+        let source = null;
+
+        const search = new URLSearchParams(window.location.search);
+        const token = search.get("token");
+        const bufnr = search.get("buf");
+
+        if (!token || !bufnr) {
+          setStatus("Missing token or buffer id");
+          showWarning("Preview URL is missing required query parameters.");
+          return;
+        }
+
+        function setStatus(message) {
+          statusLine.textContent = message;
+        }
+
+        function showWarning(message) {
+          warning.style.display = "block";
+          warning.textContent = message;
+        }
+
+        function clearWarning() {
+          warning.style.display = "none";
+          warning.textContent = "";
+        }
+
+        function updateAnchors() {
+          lineAnchors = [];
+          const candidates = currentArticle.querySelectorAll("[data-line]");
+          for (const element of candidates) {
+            const line = Number(element.getAttribute("data-line"));
+            if (!Number.isNaN(line)) {
+              lineAnchors.push({ line, element });
+            }
+          }
+          lineAnchors.sort((a, b) => a.line - b.line);
+        }
+
+        function installHtml(html) {
+          previewRoot.innerHTML = html;
+          currentArticle = previewRoot.querySelector("#md-root") || previewRoot;
+          updateAnchors();
+        }
+
+        function findClosestAnchor(line) {
+          if (!lineAnchors.length) {
+            return null;
+          }
+
+          let lower = null;
+          let higher = null;
+          for (const anchor of lineAnchors) {
+            if (anchor.line === line) {
+              return anchor.element;
+            }
+            if (anchor.line < line) {
+              lower = anchor;
+              continue;
+            }
+            higher = anchor;
+            break;
+          }
+
+          if (lower) {
+            return lower.element;
+          }
+          if (higher) {
+            return higher.element;
+          }
+
+          return lineAnchors[0].element;
+        }
+
+        function proportionalFallback(line) {
+          if (!lineAnchors.length) {
+            return;
+          }
+
+          const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
+          const ratio = Math.max(0, Math.min(1, line / maxLine));
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+          window.scrollTo({ top: maxScroll * ratio, behavior: "auto" });
+        }
+
+        function scrollToCursorLine(line, force) {
+          if (!AUTO_SCROLL || !line) {
+            return;
+          }
+
+          if (!force && latestCursorLine === line) {
+            return;
+          }
+
+          latestCursorLine = line;
+
+          if (!force && performance.now() < manualScrollCooldownUntil) {
+            return;
+          }
+
+          const target = findClosestAnchor(line);
+          if (!target) {
+            proportionalFallback(line);
+            return;
+          }
+
+          const viewport = window.innerHeight || document.documentElement.clientHeight;
+          const topBand = viewport * COMFORT_TOP;
+          const bottomBand = viewport * COMFORT_BOTTOM;
+          const rect = target.getBoundingClientRect();
+
+          if (force || rect.top < topBand || rect.top > bottomBand) {
+            const desiredTop = viewport * 0.35;
+            const delta = rect.top - desiredTop;
+            const behavior = Math.abs(delta) > viewport * 0.8 ? "smooth" : "auto";
+            window.scrollBy({ top: delta, behavior });
+          }
+        }
+
+        function readPayload(event) {
+          try {
+            return JSON.parse(event.data);
+          } catch (_error) {
+            return null;
+          }
+        }
+
+        async function loadSnapshot() {
+          const response = await fetch(`/snapshot?token=${encodeURIComponent(token)}&buf=${encodeURIComponent(bufnr)}`);
+          if (!response.ok) {
+            throw new Error(`snapshot_http_${response.status}`);
+          }
+
+          const payload = await response.json();
+          installHtml(payload.html || "<article id=\"md-root\"></article>");
+          scrollToCursorLine(payload.cursor_line, true);
+          setStatus(`Connected - buffer ${bufnr}, version ${payload.version}`);
+        }
+
+        function connectEvents() {
+          if (source) {
+            source.close();
+          }
+
+          source = new EventSource(`/events?token=${encodeURIComponent(token)}&buf=${encodeURIComponent(bufnr)}`);
+
+          source.addEventListener("render_full", (event) => {
+            const payload = readPayload(event);
+            if (!payload) {
+              return;
+            }
+
+            clearWarning();
+            installHtml(payload.html || "<article id=\"md-root\"></article>");
+            scrollToCursorLine(payload.cursor_line, false);
+            setStatus(`Live - buffer ${bufnr}, version ${payload.version}`);
+          });
+
+          source.addEventListener("cursor_move", (event) => {
+            const payload = readPayload(event);
+            if (!payload) {
+              return;
+            }
+            scrollToCursorLine(payload.line, false);
+          });
+
+          source.addEventListener("session_end", (event) => {
+            const payload = readPayload(event);
+            const reason = payload && payload.reason ? payload.reason : "stopped";
+            showWarning(`Session ended: ${reason}`);
+            setStatus("Session ended");
+            if (source) {
+              source.close();
+              source = null;
+            }
+          });
+
+          source.addEventListener("heartbeat", () => {
+            setStatus(`Live - buffer ${bufnr}`);
+          });
+
+          source.onerror = () => {
+            if (source) {
+              source.close();
+              source = null;
+            }
+
+            setStatus("Disconnected - reconnecting...");
+            setTimeout(async () => {
+              try {
+                await loadSnapshot();
+                connectEvents();
+              } catch (_error) {
+                setStatus("Reconnect failed - retrying...");
+                connectEvents();
+              }
+            }, 800);
+          };
+        }
+
+        function markManualScroll() {
+          manualScrollCooldownUntil = performance.now() + 420;
+        }
+
+        window.addEventListener("wheel", markManualScroll, { passive: true });
+        window.addEventListener("touchmove", markManualScroll, { passive: true });
+        window.addEventListener("keydown", (event) => {
+          if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp"].includes(event.key)) {
+            markManualScroll();
+          }
+        });
+
+        (async () => {
+          try {
+            await loadSnapshot();
+            connectEvents();
+          } catch (_error) {
+            setStatus("Unable to load snapshot");
+            showWarning("Failed to fetch initial preview snapshot. Check token and active session.");
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>
