@@ -220,6 +220,34 @@ impl SessionManager {
         true
     }
 
+    pub async fn rerender_content(
+        &self,
+        snapshot: BufferSnapshot,
+        renderer: &MarkdownRenderer,
+    ) -> bool {
+        let rendered_html = renderer.render(&snapshot.markdown);
+        let new_hash = content_hash(&snapshot.markdown);
+
+        let mut sessions = self.sessions.write().await;
+        let Some(session) = sessions.get_mut(&snapshot.bufnr) else {
+            return false;
+        };
+
+        session.changedtick = snapshot.changedtick;
+        session.content_hash = new_hash;
+        session.cursor_line = snapshot.cursor_line;
+        session.cursor_col = snapshot.cursor_col;
+        session.html = rendered_html.clone();
+
+        let _ = session.broadcaster.send(ServerEvent::RenderFull {
+            bufnr: snapshot.bufnr,
+            html: rendered_html,
+            cursor_line: snapshot.cursor_line,
+        });
+
+        true
+    }
+
     pub async fn update_cursor(&self, bufnr: i64, line: usize, col: usize) -> bool {
         let mut sessions = self.sessions.write().await;
         let Some(session) = sessions.get_mut(&bufnr) else {
@@ -431,6 +459,56 @@ mod tests {
         sessions.stop_all(SessionEndReason::Stopped).await;
         assert_eq!(sessions.session_count().await, 0);
         assert!(!sessions.verify_token(3, &start.token).await);
+    }
+
+    #[tokio::test]
+    async fn rerender_content_forces_emit_without_text_changes() {
+        let sessions = SessionManager::default();
+        let renderer = MarkdownRenderer::default();
+
+        let start = sessions
+            .start_session(
+                BufferSnapshot {
+                    bufnr: 4,
+                    changedtick: 10,
+                    markdown: String::from("# title"),
+                    cursor_line: 1,
+                    cursor_col: 0,
+                },
+                &renderer,
+            )
+            .await;
+
+        let mut rx = sessions
+            .subscribe(4, &start.token, 777)
+            .await
+            .expect("valid subscription");
+
+        assert!(
+            sessions
+                .rerender_content(
+                    BufferSnapshot {
+                        bufnr: 4,
+                        changedtick: 10,
+                        markdown: String::from("# title"),
+                        cursor_line: 1,
+                        cursor_col: 0,
+                    },
+                    &renderer,
+                )
+                .await
+        );
+
+        let event = rx.recv().await.expect("render event");
+        match event {
+            ServerEvent::RenderFull {
+                bufnr, cursor_line, ..
+            } => {
+                assert_eq!(bufnr, 4);
+                assert_eq!(cursor_line, 1);
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
 
     #[test]

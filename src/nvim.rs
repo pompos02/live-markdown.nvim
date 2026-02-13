@@ -105,6 +105,23 @@ impl AppState {
         });
     }
 
+    fn on_buf_write(&self, buffer: api::Buffer) {
+        let bufnr = i64::from(buffer.handle());
+        if !self.has_session(bufnr) {
+            return;
+        }
+
+        let snapshot = match snapshot_from_buffer(&buffer) {
+            Ok(snapshot) => snapshot,
+            Err(_) => return,
+        };
+
+        let plugin = self.plugin.clone();
+        self.runtime.spawn(async move {
+            plugin.on_buf_write(snapshot).await;
+        });
+    }
+
     fn on_cursor_moved(&self, buffer: api::Buffer) {
         let bufnr = i64::from(buffer.handle());
         if !self.has_session(bufnr) {
@@ -308,6 +325,12 @@ fn register_autocmds() -> Result<()> {
         .build();
     api::create_autocmd(["TextChanged", "TextChangedI"], &text_opts)?;
 
+    let write_opts = CreateAutocmdOpts::builder()
+        .group(group_id)
+        .callback(autocmd_buf_write_post)
+        .build();
+    api::create_autocmd(["BufWritePost"], &write_opts)?;
+
     let cursor_opts = CreateAutocmdOpts::builder()
         .group(group_id)
         .callback(autocmd_cursor_moved)
@@ -376,6 +399,18 @@ fn autocmd_cursor_moved(args: AutocmdCallbackArgs) -> bool {
 
     if let Some(state) = state() {
         state.on_cursor_moved(args.buffer);
+    }
+
+    false
+}
+
+fn autocmd_buf_write_post(args: AutocmdCallbackArgs) -> bool {
+    if !is_markdown_buffer(&args.buffer) {
+        return false;
+    }
+
+    if let Some(state) = state() {
+        state.on_buf_write(args.buffer);
     }
 
     false

@@ -130,6 +130,13 @@ impl MarkdownRenderPlugin {
         }
     }
 
+    pub async fn on_buf_write(&self, snapshot: BufferSnapshot) {
+        let _ = self
+            .sessions
+            .rerender_content(snapshot, &self.renderer)
+            .await;
+    }
+
     pub async fn on_cursor_moved(&self, bufnr: i64, line: usize, col: usize) {
         if self.autocmd.allow_cursor_emit(bufnr, line).await {
             let _ = self.sessions.update_cursor(bufnr, line, col).await;

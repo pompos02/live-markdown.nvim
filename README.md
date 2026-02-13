@@ -7,7 +7,9 @@ Real-time Markdown preview for Neovim, powered by Rust.
 ## Features
 
 - Live preview without saving files
+- Save-triggered re-render (`BufWritePost`)
 - Cursor-synced scrolling via line anchors (`data-line`)
+- Smooth auto-scroll cursor following
 - SSE updates with reconnect-safe snapshot flow
 - `:MarkdownRenderStart`, `:MarkdownRenderStop`, `:MarkdownRenderToggle`, `:MarkdownRenderOpen`
 - Localhost-only server with per-session tokens for `/snapshot` and `/events`

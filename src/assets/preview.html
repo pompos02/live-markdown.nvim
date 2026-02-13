@@ -573,7 +573,7 @@
           return lineAnchors[0].element;
         }
 
-        function proportionalFallback(line) {
+        function proportionalFallback(line, force) {
           if (!lineAnchors.length) {
             return;
           }
@@ -581,7 +581,7 @@
           const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
           const ratio = Math.max(0, Math.min(1, line / maxLine));
           const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-          window.scrollTo({ top: maxScroll * ratio, behavior: "auto" });
+          window.scrollTo({ top: maxScroll * ratio, behavior: force ? "auto" : "smooth" });
         }
 
         function scrollToCursorLine(line, force) {
@@ -601,7 +601,7 @@
 
           const target = findClosestAnchor(line);
           if (!target) {
-            proportionalFallback(line);
+            proportionalFallback(line, force);
             return;
           }
 
@@ -613,7 +613,7 @@
           if (force || rect.top < topBand || rect.top > bottomBand) {
             const desiredTop = viewport * 0.35;
             const delta = rect.top - desiredTop;
-            const behavior = Math.abs(delta) > viewport * 0.8 ? "smooth" : "auto";
+            const behavior = force ? "auto" : "smooth";
             window.scrollBy({ top: delta, behavior });
           }
         }
