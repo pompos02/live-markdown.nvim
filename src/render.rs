@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet, VecDeque};
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
 
 #[derive(Debug, Clone)]
@@ -23,9 +25,11 @@ impl MarkdownRenderer {
         output.push_str("<article id=\"md-root\">");
 
         let line_starts = line_start_indices(markdown);
+        let heading_ids = collect_heading_ids(markdown, self.options);
         let parser = Parser::new_ext(markdown, self.options).into_offset_iter();
 
         let mut last_line = 1usize;
+        let mut heading_index = 0usize;
         let mut image_titles: Vec<Option<String>> = Vec::new();
         let mut in_table_head = false;
 
@@ -47,6 +51,8 @@ impl MarkdownRenderer {
                     &mut output,
                     tag,
                     line,
+                    &heading_ids,
+                    &mut heading_index,
                     &mut image_titles,
                     &mut in_table_head,
                 ),
@@ -85,6 +91,8 @@ fn render_start_tag(
     out: &mut String,
     tag: Tag<'_>,
     line: usize,
+    heading_ids: &[String],
+    heading_index: &mut usize,
     image_titles: &mut Vec<Option<String>>,
     in_table_head: &mut bool,
 ) {
@@ -96,7 +104,14 @@ fn render_start_tag(
             out.push_str(&level.to_string());
             out.push_str(" data-line=\"");
             out.push_str(&line.to_string());
-            out.push_str("\">");
+            out.push('"');
+            if let Some(heading_id) = heading_ids.get(*heading_index) {
+                out.push_str(" id=\"");
+                push_escaped_attr(out, heading_id);
+                out.push('"');
+            }
+            out.push('>');
+            *heading_index = heading_index.saturating_add(1);
         }
         Tag::BlockQuote => open_block_tag(out, "blockquote", line),
         Tag::CodeBlock(kind) => {
@@ -256,6 +271,205 @@ fn line_for_offset(offset: usize, starts: &[usize]) -> usize {
     }
 }
 
+fn collect_heading_ids(markdown: &str, options: Options) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut used_ids = HashSet::new();
+    let mut next_suffixes: HashMap<String, usize> = HashMap::new();
+    let mut heading_aliases = collect_internal_heading_aliases(markdown, options);
+
+    let mut heading_text: Option<String> = None;
+    let mut explicit_heading_id: Option<String> = None;
+
+    for event in Parser::new_ext(markdown, options) {
+        match event {
+            Event::Start(Tag::Heading(_level, id, _classes)) => {
+                heading_text = Some(String::new());
+                explicit_heading_id = normalize_heading_id(id.as_deref());
+            }
+            Event::End(Tag::Heading(..)) => {
+                let text = heading_text.take().unwrap_or_default();
+                let base = if let Some(explicit) = explicit_heading_id.take() {
+                    explicit
+                } else if let Some(alias) = take_heading_alias(&mut heading_aliases, &text) {
+                    alias
+                } else {
+                    slugify_heading(&text)
+                };
+                let unique = unique_heading_id(base, &mut used_ids, &mut next_suffixes);
+                ids.push(unique);
+            }
+            Event::Text(text) | Event::Code(text) | Event::Html(text) => {
+                if let Some(current) = heading_text.as_mut() {
+                    current.push_str(text.as_ref());
+                }
+            }
+            Event::FootnoteReference(text) => {
+                if let Some(current) = heading_text.as_mut() {
+                    current.push_str(text.as_ref());
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                if let Some(current) = heading_text.as_mut() {
+                    if !current.ends_with(' ') {
+                        current.push(' ');
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    ids
+}
+
+fn collect_internal_heading_aliases(
+    markdown: &str,
+    options: Options,
+) -> HashMap<String, VecDeque<String>> {
+    let mut aliases: HashMap<String, VecDeque<String>> = HashMap::new();
+
+    let mut active_fragment: Option<String> = None;
+    let mut active_text = String::new();
+
+    for event in Parser::new_ext(markdown, options) {
+        match event {
+            Event::Start(Tag::Link(_kind, dest, _title)) => {
+                active_fragment = internal_fragment_id(dest.as_ref());
+                active_text.clear();
+            }
+            Event::End(Tag::Link(..)) => {
+                if let Some(fragment) = active_fragment.take() {
+                    let key = normalize_heading_lookup_text(&active_text);
+                    if !key.is_empty() {
+                        aliases.entry(key).or_default().push_back(fragment);
+                    }
+                }
+                active_text.clear();
+            }
+            Event::Text(text) | Event::Code(text) | Event::Html(text) => {
+                if active_fragment.is_some() {
+                    active_text.push_str(text.as_ref());
+                }
+            }
+            Event::FootnoteReference(text) => {
+                if active_fragment.is_some() {
+                    active_text.push_str(text.as_ref());
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                if active_fragment.is_some() && !active_text.ends_with(' ') {
+                    active_text.push(' ');
+                }
+            }
+            _ => {}
+        }
+    }
+
+    aliases
+}
+
+fn take_heading_alias(
+    aliases: &mut HashMap<String, VecDeque<String>>,
+    heading_text: &str,
+) -> Option<String> {
+    let key = normalize_heading_lookup_text(heading_text);
+    if key.is_empty() {
+        return None;
+    }
+
+    let queue = aliases.get_mut(&key)?;
+    queue.pop_front()
+}
+
+fn internal_fragment_id(dest: &str) -> Option<String> {
+    let trimmed = dest.trim();
+    let fragment = trimmed.strip_prefix('#')?.trim();
+    if fragment.is_empty() {
+        None
+    } else {
+        Some(fragment.to_string())
+    }
+}
+
+fn normalize_heading_lookup_text(text: &str) -> String {
+    let mut output = String::new();
+    let mut pending_space = false;
+
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            if pending_space && !output.is_empty() {
+                output.push(' ');
+            }
+            pending_space = false;
+            for lower in ch.to_lowercase() {
+                output.push(lower);
+            }
+        } else {
+            pending_space = true;
+        }
+    }
+
+    output
+}
+
+fn normalize_heading_id(id: Option<&str>) -> Option<String> {
+    let trimmed = id?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn slugify_heading(text: &str) -> String {
+    let mut slug = String::new();
+    let mut pending_dash = false;
+
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            if pending_dash && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_dash = false;
+            for lower in ch.to_lowercase() {
+                slug.push(lower);
+            }
+            continue;
+        }
+
+        if ch.is_whitespace() || ch == '-' || ch == '_' {
+            pending_dash = true;
+        }
+    }
+
+    if slug.is_empty() {
+        String::from("section")
+    } else {
+        slug
+    }
+}
+
+fn unique_heading_id(
+    base: String,
+    used_ids: &mut HashSet<String>,
+    next_suffixes: &mut HashMap<String, usize>,
+) -> String {
+    if used_ids.insert(base.clone()) {
+        next_suffixes.entry(base.clone()).or_insert(1);
+        return base;
+    }
+
+    let mut suffix = *next_suffixes.get(&base).unwrap_or(&1);
+    loop {
+        let candidate = format!("{base}-{suffix}");
+        suffix += 1;
+        if used_ids.insert(candidate.clone()) {
+            next_suffixes.insert(base.clone(), suffix);
+            return candidate;
+        }
+    }
+}
+
 fn sanitize_url(url: &str) -> String {
     let trimmed = url.trim();
     if trimmed.is_empty() {
@@ -311,7 +525,7 @@ mod tests {
         let markdown = "# Heading\n\n- one\n- two\n\n`code`";
         let html = renderer.render(markdown);
 
-        assert!(html.contains("<h1 data-line=\"1\">Heading</h1>"));
+        assert!(html.contains("<h1 data-line=\"1\" id=\"heading\">Heading</h1>"));
         assert!(html.contains("<li data-line=\"3\">one</li>"));
         assert!(html.contains("<code>code</code>"));
     }
@@ -341,5 +555,52 @@ mod tests {
             assert!(current >= last);
             last = current;
         }
+    }
+
+    #[test]
+    fn adds_heading_ids_for_internal_links() {
+        let renderer = MarkdownRenderer::default();
+        let markdown = "# Overview\n## Inline HTML";
+        let html = renderer.render(markdown);
+
+        assert!(html.contains("<h1 data-line=\"1\" id=\"overview\">Overview</h1>"));
+        assert!(html.contains("<h2 data-line=\"2\" id=\"inline-html\">Inline HTML</h2>"));
+    }
+
+    #[test]
+    fn keeps_explicit_heading_ids() {
+        let renderer = MarkdownRenderer::default();
+        let markdown =
+            "## Inline HTML {#html}\n## Automatic Escaping for Special Characters {#autoescape}";
+        let html = renderer.render(markdown);
+
+        assert!(html.contains("<h2 data-line=\"1\" id=\"html\">Inline HTML</h2>"));
+        assert!(html.contains(
+            "<h2 data-line=\"2\" id=\"autoescape\">Automatic Escaping for Special Characters</h2>"
+        ));
+    }
+
+    #[test]
+    fn deduplicates_heading_ids() {
+        let renderer = MarkdownRenderer::default();
+        let markdown = "## Section\n## Section\n## Section-1\n## Section";
+        let html = renderer.render(markdown);
+
+        assert!(html.contains("<h2 data-line=\"1\" id=\"section\">Section</h2>"));
+        assert!(html.contains("<h2 data-line=\"2\" id=\"section-1\">Section</h2>"));
+        assert!(html.contains("<h2 data-line=\"3\" id=\"section-1-1\">Section-1</h2>"));
+        assert!(html.contains("<h2 data-line=\"4\" id=\"section-2\">Section</h2>"));
+    }
+
+    #[test]
+    fn infers_heading_ids_from_internal_toc_links() {
+        let renderer = MarkdownRenderer::default();
+        let markdown = "- [Inline HTML](#html)\n- [Automatic Escaping for Special Characters](#autoescape)\n\n## Inline HTML\n## Automatic Escaping for Special Characters";
+        let html = renderer.render(markdown);
+
+        assert!(html.contains("<h2 data-line=\"4\" id=\"html\">Inline HTML</h2>"));
+        assert!(html.contains(
+            "<h2 data-line=\"5\" id=\"autoescape\">Automatic Escaping for Special Characters</h2>"
+        ));
     }
 }
