@@ -23,7 +23,6 @@ const PREVIEW_HTML: &str = include_str!("assets/preview.html");
 pub struct ServerConfig {
     pub port: u16,
     pub bind_address: String,
-    pub open_browser_on_start: bool,
     pub debounce_ms_content: u64,
     pub throttle_ms_cursor: u64,
     pub auto_scroll: bool,
@@ -36,7 +35,6 @@ impl Default for ServerConfig {
         Self {
             port: 6419,
             bind_address: String::from("127.0.0.1"),
-            open_browser_on_start: true,
             debounce_ms_content: 100,
             throttle_ms_cursor: 24,
             auto_scroll: true,

@@ -6,10 +6,19 @@
     <title>Markdown Render Preview</title>
     <style>
       :root {
-        --paper: #f6f1e8;
-        --ink: #21211e;
-        --accent: #7f4f24;
-        --edge: #d8ceb9;
+        --bg: #0a0a0a;
+        --surface: #111111;
+        --surface-2: #0f0f0f;
+        --border: #262626;
+        --text: #c8c8c8;
+        --text-strong: #f0f0f0;
+        --text-muted: #8c8c8c;
+        --accent: #b6b6b6;
+        --code-bg: #0b0b0b;
+        --inline-bg: #171717;
+        --warn-bg: #201516;
+        --warn-border: #4d3033;
+        --warn-text: #e3b9bd;
       }
 
       * {
@@ -18,54 +27,50 @@
 
       body {
         margin: 0;
-        color: var(--ink);
-        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
-        background:
-          radial-gradient(circle at 15% 0%, #fff8ec 0%, #f6f1e8 48%),
-          linear-gradient(165deg, #fdf9f1 0%, #efe4cc 100%);
+        color: var(--text);
+        font-family: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        font-size: 15px;
+        background: var(--bg);
       }
 
       .shell {
-        max-width: 920px;
-        margin: 4vh auto 8vh;
-        padding: 18px 20px 36px;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 18px 14px 28px;
       }
 
       .status-card {
-        border: 1px solid var(--edge);
-        background: rgba(255, 252, 246, 0.8);
-        border-radius: 14px;
-        padding: 12px 16px;
-        margin-bottom: 14px;
-        backdrop-filter: blur(5px);
+        border: 1px solid var(--border);
+        background: transparent;
+        border-radius: 4px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
       }
 
       .status-title {
         margin: 0;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--accent);
+        font-size: 0.74rem;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
       }
 
       .status-line {
         margin: 4px 0 0;
-        font-family: "IBM Plex Mono", "Courier New", monospace;
-        font-size: 0.9rem;
+        color: var(--text-strong);
+        font-size: 0.84rem;
       }
 
       #preview-root {
-        border: 1px solid var(--edge);
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.84);
-        padding: 26px 30px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--surface-2);
+        padding: 20px 22px;
         min-height: 72vh;
-        box-shadow: 0 20px 50px rgba(56, 38, 15, 0.08);
       }
 
       #md-root {
         line-height: 1.62;
-        font-size: 1.05rem;
+        font-size: 0.95rem;
       }
 
       #md-root h1,
@@ -74,54 +79,136 @@
       #md-root h4,
       #md-root h5,
       #md-root h6 {
-        line-height: 1.2;
+        color: var(--text-strong);
+        line-height: 1.28;
         margin-top: 1.4em;
+        margin-bottom: 0.4em;
+      }
+
+      #md-root h1 {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.25em;
+      }
+
+      #md-root a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-decoration-color: #5a5a5a;
+      }
+
+      #md-root blockquote {
+        border-left: 2px solid var(--accent);
+        margin-left: 0;
+        padding: 0.2em 0 0.2em 0.9em;
+        color: #ababab;
       }
 
       #md-root code,
       #md-root pre,
       #md-root .mono {
-        font-family: "IBM Plex Mono", "Fira Mono", "Courier New", monospace;
+        font-family: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      }
+
+      #md-root :not(pre) > code {
+        background: var(--inline-bg);
+        color: #cfe2ff;
+        padding: 0.15em 0.35em;
+        border-radius: 3px;
+        border: 1px solid var(--border);
       }
 
       #md-root pre {
-        border: 1px solid #d8d3c4;
-        background: #f5f2eb;
-        border-radius: 10px;
-        padding: 12px 14px;
+        position: relative;
+        border: 1px solid var(--border);
+        background: var(--code-bg);
+        border-radius: 4px;
+        padding: 24px 14px 12px;
         overflow-x: auto;
+      }
+
+      #md-root pre[data-lang]::before {
+        content: attr(data-lang);
+        position: absolute;
+        top: 6px;
+        right: 10px;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      #md-root pre code {
+        color: #d7e8ff;
+      }
+
+      #md-root .tok-comment {
+        color: #6f89ab;
+      }
+
+      #md-root .tok-keyword {
+        color: #ca9eff;
+        font-weight: 600;
+      }
+
+      #md-root .tok-string {
+        color: #9be97f;
+      }
+
+      #md-root .tok-number {
+        color: #ffbe78;
+      }
+
+      #md-root .tok-function {
+        color: #61d4ff;
+      }
+
+      #md-root .tok-constant {
+        color: #ff9ecb;
+      }
+
+      #md-root .tok-variable {
+        color: #8fe3d2;
+      }
+
+      #md-root .tok-property {
+        color: #f6dca3;
       }
 
       #md-root table {
         border-collapse: collapse;
         width: 100%;
+        background: #101010;
       }
 
       #md-root td,
       #md-root th {
-        border: 1px solid #d8d3c4;
+        border: 1px solid var(--border);
         padding: 8px 10px;
+      }
+
+      #md-root hr {
+        border: 0;
+        border-top: 1px solid var(--border);
       }
 
       .warning {
         margin-top: 10px;
-        border-radius: 10px;
-        border: 1px solid #e2b2a1;
-        background: #fde8e1;
-        color: #6b2a1d;
+        border-radius: 4px;
+        border: 1px solid var(--warn-border);
+        background: var(--warn-bg);
+        color: var(--warn-text);
         padding: 8px 10px;
         display: none;
       }
 
       @media (max-width: 900px) {
         .shell {
-          margin: 0;
-          padding: 10px 10px 24px;
+          padding: 10px;
         }
 
         #preview-root {
-          padding: 18px 16px;
-          border-radius: 12px;
+          padding: 16px 14px;
+          border-radius: 6px;
           min-height: calc(100vh - 80px);
         }
       }
@@ -161,6 +248,61 @@
         const token = search.get("token");
         const bufnr = search.get("buf");
 
+        const LANGUAGE_ALIASES = Object.freeze({
+          rs: "rust",
+          js: "javascript",
+          jsx: "javascript",
+          mjs: "javascript",
+          cjs: "javascript",
+          ts: "typescript",
+          tsx: "typescript",
+          py: "python",
+          sh: "shell",
+          bash: "shell",
+          shellsession: "shell",
+          "shell-session": "shell",
+          console: "shell",
+          zsh: "shell",
+          fish: "shell",
+          cxx: "cpp",
+          cc: "cpp",
+          "c++": "cpp",
+          hpp: "cpp",
+          hxx: "cpp",
+          yml: "yaml",
+          jsonc: "javascript",
+          psql: "sql",
+          mysql: "sql",
+          postgresql: "sql",
+          sqlite: "sql",
+          plain: "plain",
+          plaintext: "plain",
+          md: "markdown",
+          mkd: "markdown",
+          mdown: "markdown",
+          txt: "plain",
+          text: "plain"
+        });
+
+        const KEYWORDS_BY_LANGUAGE = Object.freeze({
+          rust: ["as", "async", "await", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while"],
+          javascript: ["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import", "in", "instanceof", "let", "new", "null", "of", "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "yield"],
+          typescript: ["abstract", "any", "as", "async", "await", "break", "case", "catch", "class", "const", "continue", "declare", "default", "do", "else", "enum", "export", "extends", "false", "finally", "for", "from", "function", "if", "implements", "import", "in", "infer", "interface", "is", "keyof", "let", "module", "namespace", "never", "new", "null", "readonly", "return", "satisfies", "static", "super", "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var", "void", "while"],
+          python: ["and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"],
+          shell: ["case", "do", "done", "elif", "else", "esac", "export", "fi", "for", "function", "if", "in", "local", "readonly", "return", "select", "then", "until", "while"],
+          go: ["break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "if", "import", "interface", "map", "package", "range", "return", "select", "struct", "switch", "type", "var"],
+          c: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"],
+          cpp: ["alignas", "alignof", "auto", "bool", "break", "case", "catch", "char", "class", "const", "constexpr", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "nullptr", "operator", "private", "protected", "public", "return", "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw", "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "while"],
+          java: ["abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "false", "final", "finally", "float", "for", "if", "implements", "import", "instanceof", "int", "interface", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "void", "volatile", "while"],
+          ruby: ["BEGIN", "END", "alias", "and", "begin", "break", "case", "class", "def", "defined?", "do", "else", "elsif", "end", "ensure", "false", "for", "if", "in", "module", "next", "nil", "not", "or", "redo", "rescue", "retry", "return", "self", "super", "then", "true", "undef", "unless", "until", "when", "while", "yield"],
+          sql: ["all", "and", "as", "asc", "between", "by", "case", "create", "delete", "desc", "distinct", "drop", "else", "end", "exists", "from", "group", "having", "in", "inner", "insert", "into", "is", "join", "left", "limit", "not", "null", "on", "or", "order", "outer", "right", "select", "set", "table", "then", "union", "update", "values", "when", "where"]
+        });
+
+        const C_STYLE_LANGUAGES = new Set(["rust", "javascript", "typescript", "go", "c", "cpp", "java", "sql"]);
+        const HASH_COMMENT_LANGUAGES = new Set(["python", "shell", "ruby", "yaml", "toml", "markdown"]);
+        const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
+        const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
+
         if (!token || !bufnr) {
           setStatus("Missing token or buffer id");
           showWarning("Preview URL is missing required query parameters.");
@@ -181,6 +323,208 @@
           warning.textContent = "";
         }
 
+        function escapeHtml(value) {
+          return value
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+        }
+
+        function escapeRegex(value) {
+          return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        }
+
+        function normalizeLanguage(raw) {
+          if (!raw) {
+            return "plain";
+          }
+
+          const lowered = raw.toLowerCase().trim();
+          return LANGUAGE_ALIASES[lowered] || lowered;
+        }
+
+        function languageFromClassName(className) {
+          if (!className) {
+            return null;
+          }
+
+          if (className.startsWith("language-")) {
+            return normalizeLanguage(className.slice("language-".length));
+          }
+
+          if (className.startsWith("lang-")) {
+            return normalizeLanguage(className.slice("lang-".length));
+          }
+
+          if (className.startsWith("source-")) {
+            return normalizeLanguage(className.slice("source-".length));
+          }
+
+          if (className in LANGUAGE_ALIASES || className in KEYWORDS_BY_LANGUAGE) {
+            return normalizeLanguage(className);
+          }
+
+          return null;
+        }
+
+        function languageFromCodeElement(codeElement) {
+          for (const className of codeElement.classList) {
+            const detected = languageFromClassName(className);
+            if (detected) {
+              return detected;
+            }
+          }
+
+          const pre = codeElement.parentElement;
+          if (pre && pre.tagName === "PRE") {
+            const dataLang = pre.getAttribute("data-lang");
+            const normalized = normalizeLanguage(dataLang || "");
+            if (normalized !== "plain") {
+              return normalized;
+            }
+
+            for (const className of pre.classList) {
+              const detected = languageFromClassName(className);
+              if (detected) {
+                return detected;
+              }
+            }
+          }
+
+          return "plain";
+        }
+
+        function keywordRegexFor(language) {
+          const words = KEYWORDS_BY_LANGUAGE[language];
+          if (!words || words.length === 0) {
+            return null;
+          }
+
+          const pattern = words.map((word) => escapeRegex(word)).join("|");
+          const flags = CASE_INSENSITIVE_KEYWORD_LANGUAGES.has(language) ? "gi" : "g";
+          return new RegExp(`\\b(?:${pattern})\\b`, flags);
+        }
+
+        function patternsForLanguage(language) {
+          const patterns = [];
+
+          if (C_STYLE_LANGUAGES.has(language)) {
+            patterns.push({ regex: /\/\*[\s\S]*?\*\//g, kind: "comment" });
+            patterns.push({ regex: /\/\/[^\n]*/g, kind: "comment" });
+          }
+
+          if (HASH_COMMENT_LANGUAGES.has(language)) {
+            patterns.push({ regex: /#[^\n]*/g, kind: "comment" });
+          }
+
+          if (DASH_COMMENT_LANGUAGES.has(language)) {
+            patterns.push({ regex: /--[^\n]*/g, kind: "comment" });
+          }
+
+          if (language === "json") {
+            patterns.push({ regex: /"(?:\\.|[^"\\])*"(?=\s*:)/g, kind: "property" });
+          }
+
+          patterns.push({ regex: /`(?:\\.|[^`])*`/g, kind: "string" });
+          patterns.push({ regex: /"(?:\\.|[^"\\])*"/g, kind: "string" });
+          patterns.push({ regex: /'(?:\\.|[^'\\])*'/g, kind: "string" });
+
+          if (language === "shell") {
+            patterns.push({ regex: /\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g, kind: "variable" });
+          }
+
+          const keywordRegex = keywordRegexFor(language);
+          if (keywordRegex) {
+            patterns.push({ regex: keywordRegex, kind: "keyword" });
+          }
+
+          patterns.push({ regex: /\b(?:true|false|null|None|Some|Ok|Err)\b/g, kind: "constant" });
+          patterns.push({ regex: /\b(?:0x[a-fA-F0-9]+|0b[01]+|0o[0-7]+|\d+(?:\.\d+)?(?:e[+\-]?\d+)?)\b/gi, kind: "number" });
+          patterns.push({ regex: /\b[A-Za-z_][A-Za-z0-9_]*\s*(?=\()/g, kind: "function" });
+
+          return patterns;
+        }
+
+        function highlightSource(text, language) {
+          const patterns = patternsForLanguage(language);
+          if (patterns.length === 0) {
+            return escapeHtml(text);
+          }
+
+          let output = "";
+          let index = 0;
+
+          while (index < text.length) {
+            let winner = null;
+
+            for (const pattern of patterns) {
+              pattern.regex.lastIndex = index;
+              const match = pattern.regex.exec(text);
+              if (!match || match[0].length === 0) {
+                continue;
+              }
+
+              if (
+                winner === null ||
+                match.index < winner.match.index ||
+                (match.index === winner.match.index && match[0].length > winner.match[0].length)
+              ) {
+                winner = { pattern, match };
+              }
+            }
+
+            if (!winner) {
+              output += escapeHtml(text.slice(index));
+              break;
+            }
+
+            if (winner.match.index > index) {
+              output += escapeHtml(text.slice(index, winner.match.index));
+            }
+
+            const tokenValue = winner.match[0];
+            output += `<span class="tok-${winner.pattern.kind}">${escapeHtml(tokenValue)}</span>`;
+            index = winner.match.index + tokenValue.length;
+          }
+
+          return output;
+        }
+
+        function applySyntaxHighlighting(root) {
+          const MAX_BLOCK_CHARS = 120000;
+          const blocks = root.querySelectorAll("pre code");
+          for (const codeElement of blocks) {
+            const raw = codeElement.textContent || "";
+            if (raw.length > MAX_BLOCK_CHARS) {
+              continue;
+            }
+
+            const language = languageFromCodeElement(codeElement);
+            const highlighted = highlightSource(raw, language);
+            codeElement.innerHTML = highlighted;
+
+            const pre = codeElement.parentElement;
+            if (pre && pre.tagName === "PRE") {
+              if (language !== "plain") {
+                pre.setAttribute("data-lang", language);
+              } else {
+                pre.removeAttribute("data-lang");
+              }
+            }
+          }
+
+          const inlineCodes = root.querySelectorAll(":not(pre) > code");
+          for (const inlineCode of inlineCodes) {
+            const raw = inlineCode.textContent || "";
+            if (raw.length > 260) {
+              continue;
+            }
+            inlineCode.innerHTML = highlightSource(raw, "plain");
+          }
+        }
+
         function updateAnchors() {
           lineAnchors = [];
           const candidates = currentArticle.querySelectorAll("[data-line]");
@@ -196,6 +540,7 @@
         function installHtml(html) {
           previewRoot.innerHTML = html;
           currentArticle = previewRoot.querySelector("#md-root") || previewRoot;
+          applySyntaxHighlighting(currentArticle);
           updateAnchors();
         }
 
@@ -290,7 +635,7 @@
           const payload = await response.json();
           installHtml(payload.html || "<article id=\"md-root\"></article>");
           scrollToCursorLine(payload.cursor_line, true);
-          setStatus(`Connected - buffer ${bufnr}, version ${payload.version}`);
+          setStatus(`Connected - buffer ${bufnr}`);
         }
 
         function connectEvents() {
@@ -309,7 +654,7 @@
             clearWarning();
             installHtml(payload.html || "<article id=\"md-root\"></article>");
             scrollToCursorLine(payload.cursor_line, false);
-            setStatus(`Live - buffer ${bufnr}, version ${payload.version}`);
+            setStatus(`Live - buffer ${bufnr}`);
           });
 
           source.addEventListener("cursor_move", (event) => {

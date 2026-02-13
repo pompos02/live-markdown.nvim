@@ -30,7 +30,6 @@ Use your plugin manager and run the build helper so the native module is copied 
   config = function()
     require("markdown_render").setup({
       port = 6419,
-      open_browser_on_start = true,
       debounce_ms_content = 100,
       throttle_ms_cursor = 24,
       bind_address = "127.0.0.1",
@@ -46,7 +45,7 @@ You can also rely on auto-setup by setting `vim.g.markdown_render` before plugin
 
 ```lua
 vim.g.markdown_render = {
-  open_browser_on_start = false,
+  auto_scroll = true,
 }
 ```
 
@@ -62,14 +61,13 @@ vim.g.markdown_render_disable_auto_setup = true
 - `:MarkdownRenderStop` - stop preview for current buffer
 - `:MarkdownRenderStop!` - stop all active preview sessions
 - `:MarkdownRenderToggle` - toggle preview for current buffer
-- `:MarkdownRenderOpen` - open current preview URL in browser
+- `:MarkdownRenderOpen` - print current preview URL
 
 ## Configuration
 
 `setup({...})` keys:
 
 - `port` (`6419`)
-- `open_browser_on_start` (`true`)
 - `debounce_ms_content` (`100`)
 - `throttle_ms_cursor` (`24`)
 - `bind_address` (`"127.0.0.1"`)

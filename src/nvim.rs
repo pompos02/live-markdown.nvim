@@ -1,4 +1,4 @@
-use crate::plugin::{MarkdownRenderPlugin, launch_browser};
+use crate::plugin::MarkdownRenderPlugin;
 use crate::server::ServerConfig;
 use crate::session::BufferSnapshot;
 use nvim_oxi::api;
@@ -83,16 +83,9 @@ impl AppState {
 
     fn open_current(&self) -> std::result::Result<Option<String>, String> {
         let bufnr = i64::from(api::get_current_buf().handle());
-        let url = self
-            .runtime
+        self.runtime
             .block_on(self.plugin.open_preview(bufnr))
-            .map_err(|err| err.to_string())?;
-
-        if let Some(url) = url.as_ref() {
-            launch_browser(url);
-        }
-
-        Ok(url)
+            .map_err(|err| err.to_string())
     }
 
     fn on_text_changed(&self, buffer: api::Buffer) {
@@ -248,7 +241,7 @@ fn open(_: ()) {
     };
 
     match state.open_current() {
-        Ok(Some(url)) => notify_info(&format!("[markdown-render] opened preview: {url}")),
+        Ok(Some(url)) => notify_info(&format!("[markdown-render] preview URL: {url}")),
         Ok(None) => notify_info("[markdown-render] no active preview for current buffer"),
         Err(err) => notify_err(&format!("[markdown-render] {err}")),
     }
@@ -296,7 +289,7 @@ fn register_commands() -> Result<()> {
     api::create_user_command("MarkdownRenderToggle", command_toggle, &toggle_opts)?;
 
     let open_opts = CreateCommandOpts::builder()
-        .desc("Open markdown preview in browser")
+        .desc("Show markdown preview URL")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
@@ -457,12 +450,6 @@ fn parse_server_config(opts: Option<Dictionary>) -> ServerConfig {
         && (1..=u16::MAX as i64).contains(&port)
     {
         config.port = port as u16;
-    }
-
-    if let Some(open_browser_on_start) =
-        get_dict_bool(&opts, &["open_browser_on_start", "openBrowserOnStart"])
-    {
-        config.open_browser_on_start = open_browser_on_start;
     }
 
     if let Some(debounce_ms_content) =
@@ -654,14 +641,13 @@ mod tests {
         assert_eq!(parsed.bind_address, defaults.bind_address);
         assert_eq!(parsed.debounce_ms_content, defaults.debounce_ms_content);
         assert_eq!(parsed.throttle_ms_cursor, defaults.throttle_ms_cursor);
-        assert_eq!(parsed.open_browser_on_start, defaults.open_browser_on_start);
+        assert_eq!(parsed.auto_scroll, defaults.auto_scroll);
     }
 
     #[test]
     fn accepts_setup_overrides_from_dictionary() {
         let opts = Dictionary::from_iter([
             ("port", Object::from(6520)),
-            ("open_browser_on_start", Object::from(false)),
             ("debounceMsContent", Object::from(140)),
             ("throttle_ms_cursor", Object::from(35)),
             ("bindAddress", Object::from("localhost")),
@@ -673,7 +659,6 @@ mod tests {
         let parsed = parse_server_config(Some(opts));
 
         assert_eq!(parsed.port, 6520);
-        assert!(!parsed.open_browser_on_start);
         assert_eq!(parsed.debounce_ms_content, 140);
         assert_eq!(parsed.throttle_ms_cursor, 35);
         assert_eq!(parsed.bind_address, "127.0.0.1");

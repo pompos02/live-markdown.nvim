@@ -7,7 +7,6 @@ use crate::server::{ServerConfig, ServerController};
 use crate::session::{BufferSnapshot, SessionManager};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::process::Command;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -37,7 +36,6 @@ pub struct MarkdownRenderPlugin {
     sessions: SessionManager,
     server: ServerController,
     autocmd: autocmd::AutocmdGate,
-    config: ServerConfig,
 }
 
 impl Default for MarkdownRenderPlugin {
@@ -60,7 +58,6 @@ impl MarkdownRenderPlugin {
             sessions,
             server,
             autocmd,
-            config,
         }
     }
 
@@ -83,10 +80,6 @@ impl MarkdownRenderPlugin {
             started.token,
             started.bufnr
         );
-
-        if self.config.open_browser_on_start {
-            open_browser(&url);
-        }
 
         Ok(url)
     }
@@ -171,27 +164,6 @@ impl MarkdownRenderPlugin {
     }
 }
 
-pub fn launch_browser(url: &str) {
-    open_browser(url);
-}
-
-fn open_browser(url: &str) {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = Command::new("xdg-open").arg(url).spawn();
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let _ = Command::new("open").arg(url).spawn();
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::MarkdownRenderPlugin;
@@ -200,10 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn toggle_starts_and_stops_session() {
-        let plugin = MarkdownRenderPlugin::new(ServerConfig {
-            open_browser_on_start: false,
-            ..ServerConfig::default()
-        });
+        let plugin = MarkdownRenderPlugin::new(ServerConfig::default());
 
         let buffer = BufferSnapshot {
             bufnr: 5,

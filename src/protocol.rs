@@ -17,7 +17,6 @@ pub enum SessionEndReason {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotResponse {
     pub bufnr: i64,
-    pub version: u64,
     pub html: String,
     pub cursor_line: usize,
     pub cursor_col: usize,
@@ -28,7 +27,6 @@ pub struct SnapshotResponse {
 pub enum ServerEvent {
     RenderFull {
         bufnr: i64,
-        version: u64,
         html: String,
         cursor_line: usize,
     },

@@ -31,7 +31,6 @@ pub struct BufferSnapshot {
 pub struct SessionStartInfo {
     pub bufnr: i64,
     pub token: String,
-    pub version: u64,
 }
 
 #[derive(Debug)]
@@ -39,7 +38,6 @@ struct Session {
     bufnr: i64,
     changedtick: u64,
     content_hash: u64,
-    render_version: u64,
     cursor_line: usize,
     cursor_col: usize,
     subscribers: HashSet<ClientId>,
@@ -56,7 +54,6 @@ impl Session {
             bufnr,
             changedtick: 0,
             content_hash: 0,
-            render_version: 0,
             cursor_line: 1,
             cursor_col: 0,
             subscribers: HashSet::new(),
@@ -102,14 +99,12 @@ impl SessionManager {
         session.state = LifecycleState::Running;
         session.changedtick = snapshot.changedtick;
         session.content_hash = content_hash;
-        session.render_version = session.render_version.saturating_add(1);
         session.cursor_line = snapshot.cursor_line;
         session.cursor_col = snapshot.cursor_col;
         session.html = rendered_html.clone();
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
-            version: session.render_version,
             html: rendered_html,
             cursor_line: snapshot.cursor_line,
         });
@@ -117,7 +112,6 @@ impl SessionManager {
         let info = SessionStartInfo {
             bufnr: snapshot.bufnr,
             token: session.token.clone(),
-            version: session.render_version,
         };
 
         drop(sessions);
@@ -187,42 +181,43 @@ impl SessionManager {
         &self,
         snapshot: BufferSnapshot,
         renderer: &MarkdownRenderer,
-    ) -> Option<u64> {
+    ) -> bool {
         let new_hash = content_hash(&snapshot.markdown);
 
         {
             let sessions = self.sessions.read().await;
-            let session = sessions.get(&snapshot.bufnr)?;
+            let Some(session) = sessions.get(&snapshot.bufnr) else {
+                return false;
+            };
             if session.changedtick == snapshot.changedtick && session.content_hash == new_hash {
-                return None;
+                return false;
             }
         }
 
         let rendered_html = renderer.render(&snapshot.markdown);
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&snapshot.bufnr)?;
+        let Some(session) = sessions.get_mut(&snapshot.bufnr) else {
+            return false;
+        };
 
         if session.changedtick == snapshot.changedtick && session.content_hash == new_hash {
-            return None;
+            return false;
         }
 
         session.changedtick = snapshot.changedtick;
         session.content_hash = new_hash;
-        session.render_version = session.render_version.saturating_add(1);
         session.cursor_line = snapshot.cursor_line;
         session.cursor_col = snapshot.cursor_col;
         session.html = rendered_html.clone();
 
-        let version = session.render_version;
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
-            version,
             html: rendered_html,
             cursor_line: snapshot.cursor_line,
         });
 
-        Some(version)
+        true
     }
 
     pub async fn update_cursor(&self, bufnr: i64, line: usize, col: usize) -> bool {
@@ -265,7 +260,6 @@ impl SessionManager {
 
         Some(SnapshotResponse {
             bufnr: session.bufnr,
-            version: session.render_version,
             html: session.html.clone(),
             cursor_line: session.cursor_line,
             cursor_col: session.cursor_col,
@@ -347,7 +341,6 @@ mod tests {
             .await;
 
         assert_eq!(start.bufnr, 1);
-        assert_eq!(start.version, 1);
         assert_eq!(sessions.session_count().await, 1);
         assert_eq!(sessions.active_bufnr().await, Some(1));
 
@@ -363,7 +356,7 @@ mod tests {
                 &renderer,
             )
             .await;
-        assert_eq!(updated, Some(2));
+        assert!(updated);
 
         let stopped = sessions.stop_session(1, SessionEndReason::Stopped).await;
         assert!(stopped);
