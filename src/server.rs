@@ -6,9 +6,10 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use axum::{Json, Router, routing::get};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -150,6 +151,13 @@ struct HttpState {
     client_id_counter: Arc<AtomicU64>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct AssetQuery {
+    token: String,
+    buf: i64,
+    path: String,
+}
+
 impl HttpState {
     fn next_client_id(&self) -> u64 {
         self.client_id_counter.fetch_add(1, Ordering::Relaxed)
@@ -160,6 +168,7 @@ fn build_router(state: HttpState) -> Router {
     Router::new()
         .route("/", get(preview_shell))
         .route("/snapshot", get(snapshot))
+        .route("/asset", get(asset))
         .route("/events", get(events))
         .with_state(state)
 }
@@ -199,6 +208,35 @@ async fn snapshot(State(state): State<HttpState>, Query(query): Query<SessionQue
         Some(snapshot) => Json(snapshot).into_response(),
         None => json_error(StatusCode::UNAUTHORIZED, "invalid session token"),
     }
+}
+
+async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) -> Response {
+    let Some(path) = state
+        .sessions
+        .resolve_local_asset_path(query.buf, &query.token, &query.path)
+        .await
+    else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let bytes = match tokio::fs::read(&path).await {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "content-type",
+        HeaderValue::from_static(image_content_type(&path)),
+    );
+    headers.insert("cache-control", HeaderValue::from_static("no-store"));
+
+    (headers, bytes).into_response()
 }
 
 async fn events(State(state): State<HttpState>, Query(query): Query<SessionQuery>) -> Response {
@@ -260,6 +298,25 @@ fn json_error(status: StatusCode, message: &str) -> Response {
     }
 
     (status, Json(ErrorBody { error: message })).into_response()
+}
+
+fn image_content_type(path: &Path) -> &'static str {
+    let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
+        return "application/octet-stream";
+    };
+
+    match ext.to_ascii_lowercase().as_str() {
+        "png" | "apng" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        "tif" | "tiff" => "image/tiff",
+        _ => "application/octet-stream",
+    }
 }
 
 async fn bind_listener(config: &ServerConfig) -> Result<(TcpListener, SocketAddr), std::io::Error> {

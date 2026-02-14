@@ -17,6 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let source_path = args.get(1).cloned();
     let markdown = if let Some(path) = args.get(1) {
         fs::read_to_string(path)?
     } else {
@@ -32,6 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             markdown,
             cursor_line: 1,
             cursor_col: 0,
+            source_path,
         },
     )
     .await?;

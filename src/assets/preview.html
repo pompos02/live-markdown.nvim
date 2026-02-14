@@ -104,6 +104,14 @@
         text-decoration: underline;
       }
 
+      #md-root img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0.75em 0;
+        border-radius: 4px;
+      }
+
       #md-root blockquote {
         border-left: 2px solid var(--accent);
         margin-left: 0;
@@ -368,6 +376,77 @@
         function clearWarning() {
           warning.style.display = "none";
           warning.textContent = "";
+        }
+
+        function hasUrlScheme(value) {
+          if (/^[a-zA-Z]:[\\/]/.test(value)) {
+            return false;
+          }
+          return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value);
+        }
+
+        function normalizeLocalAssetPath(raw) {
+          let value = raw.trim();
+          if (!value) {
+            return null;
+          }
+
+          if (value.startsWith("//") || value.startsWith("#")) {
+            return null;
+          }
+
+          const lower = value.toLowerCase();
+          if (hasUrlScheme(value) && !lower.startsWith("file://")) {
+            return null;
+          }
+
+          if (lower.startsWith("file://")) {
+            value = value.slice(7);
+          }
+
+          const queryIdx = value.indexOf("?");
+          if (queryIdx >= 0) {
+            value = value.slice(0, queryIdx);
+          }
+
+          const hashIdx = value.indexOf("#");
+          if (hashIdx >= 0) {
+            value = value.slice(0, hashIdx);
+          }
+
+          if (!value) {
+            return null;
+          }
+
+          try {
+            value = decodeURIComponent(value);
+          } catch (_error) {
+            // Keep the original value when decoding fails.
+          }
+
+          return value;
+        }
+
+        function rewriteLocalImageSources(root) {
+          const images = root.querySelectorAll("img[src]");
+          for (const image of images) {
+            const rawSrc = image.getAttribute("src");
+            if (!rawSrc) {
+              continue;
+            }
+
+            const normalizedPath = normalizeLocalAssetPath(rawSrc);
+            if (!normalizedPath) {
+              continue;
+            }
+
+            const params = new URLSearchParams({
+              token,
+              buf: bufnr,
+              path: normalizedPath,
+            });
+            image.setAttribute("src", `/asset?${params.toString()}`);
+          }
         }
 
         function escapeHtml(value) {
@@ -687,6 +766,7 @@
         function installHtml(html) {
           previewRoot.innerHTML = html;
           currentArticle = previewRoot.querySelector("#md-root") || previewRoot;
+          rewriteLocalImageSources(currentArticle);
           applySyntaxHighlighting(currentArticle);
           updateAnchors();
 

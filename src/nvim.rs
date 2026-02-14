@@ -601,6 +601,18 @@ fn snapshot_from_buffer(buffer: &api::Buffer) -> std::result::Result<BufferSnaps
     }
 
     let (cursor_line, cursor_col) = cursor_for_buffer(buffer);
+    let source_path = {
+        let name = buffer
+            .get_name()
+            .map_err(|err| format!("failed to read buffer path: {err}"))?;
+        let path = name.to_string_lossy();
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    };
 
     Ok(BufferSnapshot {
         bufnr: i64::from(buffer.handle()),
@@ -608,6 +620,7 @@ fn snapshot_from_buffer(buffer: &api::Buffer) -> std::result::Result<BufferSnaps
         markdown,
         cursor_line,
         cursor_col,
+        source_path,
     })
 }
 

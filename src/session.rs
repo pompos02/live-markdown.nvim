@@ -2,6 +2,7 @@ use crate::protocol::{ServerEvent, SessionEndReason, SnapshotResponse};
 use crate::render::MarkdownRenderer;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{RwLock, broadcast};
@@ -25,6 +26,7 @@ pub struct BufferSnapshot {
     pub markdown: String,
     pub cursor_line: usize,
     pub cursor_col: usize,
+    pub source_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +45,7 @@ struct Session {
     subscribers: HashSet<ClientId>,
     token: String,
     html: String,
+    source_path: Option<PathBuf>,
     state: LifecycleState,
     broadcaster: broadcast::Sender<ServerEvent>,
 }
@@ -59,6 +62,7 @@ impl Session {
             subscribers: HashSet::new(),
             token,
             html: String::new(),
+            source_path: None,
             state: LifecycleState::Idle,
             broadcaster,
         }
@@ -102,6 +106,7 @@ impl SessionManager {
         session.cursor_line = snapshot.cursor_line;
         session.cursor_col = snapshot.cursor_col;
         session.html = rendered_html.clone();
+        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
@@ -210,6 +215,7 @@ impl SessionManager {
         session.cursor_line = snapshot.cursor_line;
         session.cursor_col = snapshot.cursor_col;
         session.html = rendered_html.clone();
+        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
@@ -238,6 +244,7 @@ impl SessionManager {
         session.cursor_line = snapshot.cursor_line;
         session.cursor_col = snapshot.cursor_col;
         session.html = rendered_html.clone();
+        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
@@ -294,6 +301,42 @@ impl SessionManager {
         })
     }
 
+    pub async fn resolve_local_asset_path(
+        &self,
+        bufnr: i64,
+        token: &str,
+        raw_path: &str,
+    ) -> Option<PathBuf> {
+        let sessions = self.sessions.read().await;
+        let session = sessions.get(&bufnr)?;
+        if session.token != token || session.state == LifecycleState::Stopped {
+            return None;
+        }
+
+        let source_file = session.source_path.as_ref()?;
+        let source_dir = source_file.parent()?.canonicalize().ok()?;
+
+        let reference = parse_local_asset_reference(raw_path)?;
+        let candidate = if reference.is_absolute() {
+            reference
+        } else {
+            source_dir.join(reference)
+        };
+
+        let resolved = candidate.canonicalize().ok()?;
+        if !resolved.starts_with(&source_dir) {
+            return None;
+        }
+        if !resolved.is_file() {
+            return None;
+        }
+        if !is_supported_image_path(&resolved) {
+            return None;
+        }
+
+        Some(resolved)
+    }
+
     pub async fn subscribe(
         &self,
         bufnr: i64,
@@ -344,11 +387,149 @@ fn content_hash(input: &str) -> u64 {
     hasher.finish()
 }
 
+fn snapshot_source_path(path: Option<&str>) -> Option<PathBuf> {
+    let trimmed = path?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+fn parse_local_asset_reference(raw_path: &str) -> Option<PathBuf> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+        return None;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let candidate = if has_url_scheme(trimmed) {
+        if !lower.starts_with("file://") {
+            return None;
+        }
+        &trimmed[7..]
+    } else {
+        trimmed
+    };
+
+    let end = candidate.find(['?', '#']).unwrap_or(candidate.len());
+    if end == 0 {
+        return None;
+    }
+
+    let without_suffix = &candidate[..end];
+    let decoded = decode_percent_encoded(without_suffix)?;
+    if decoded.trim().is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(decoded))
+}
+
+fn has_url_scheme(value: &str) -> bool {
+    if value.len() >= 3 {
+        let bytes = value.as_bytes();
+        if bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/')
+        {
+            return false;
+        }
+    }
+
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() {
+        return false;
+    }
+
+    for ch in chars {
+        if ch == ':' {
+            return true;
+        }
+        if ch.is_ascii_alphanumeric() || ch == '+' || ch == '-' || ch == '.' {
+            continue;
+        }
+        return false;
+    }
+
+    false
+}
+
+fn decode_percent_encoded(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            decoded.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+
+        if index + 2 >= bytes.len() {
+            return None;
+        }
+
+        let high = decode_hex_nibble(bytes[index + 1])?;
+        let low = decode_hex_nibble(bytes[index + 2])?;
+        decoded.push((high << 4) | low);
+        index += 3;
+    }
+
+    String::from_utf8(decoded).ok()
+}
+
+fn decode_hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn is_supported_image_path(path: &Path) -> bool {
+    let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "svg"
+            | "bmp"
+            | "ico"
+            | "avif"
+            | "apng"
+            | "tif"
+            | "tiff"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BufferSnapshot, LifecycleState, SessionManager};
     use crate::protocol::{ServerEvent, SessionEndReason};
     use crate::render::MarkdownRenderer;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("markdown-render-{name}-{nanos}"))
+    }
 
     #[tokio::test]
     async fn session_start_update_and_stop_lifecycle() {
@@ -363,6 +544,7 @@ mod tests {
                     markdown: String::from("# hello"),
                     cursor_line: 1,
                     cursor_col: 0,
+                    source_path: None,
                 },
                 &renderer,
             )
@@ -380,6 +562,7 @@ mod tests {
                     markdown: String::from("# hello\n\nmore"),
                     cursor_line: 2,
                     cursor_col: 0,
+                    source_path: None,
                 },
                 &renderer,
             )
@@ -405,6 +588,7 @@ mod tests {
                     markdown: String::from("line"),
                     cursor_line: 1,
                     cursor_col: 0,
+                    source_path: None,
                 },
                 &renderer,
             )
@@ -428,6 +612,7 @@ mod tests {
                     markdown: String::from("line"),
                     cursor_line: 1,
                     cursor_col: 0,
+                    source_path: None,
                 },
                 &renderer,
             )
@@ -474,6 +659,7 @@ mod tests {
                     markdown: String::from("# title"),
                     cursor_line: 1,
                     cursor_col: 0,
+                    source_path: None,
                 },
                 &renderer,
             )
@@ -493,6 +679,7 @@ mod tests {
                         markdown: String::from("# title"),
                         cursor_line: 1,
                         cursor_col: 0,
+                        source_path: None,
                     },
                     &renderer,
                 )
@@ -509,6 +696,64 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn resolves_image_asset_paths_from_buffer_directory() {
+        let sessions = SessionManager::default();
+        let renderer = MarkdownRenderer::default();
+
+        let root = temp_test_dir("assets");
+        let image_dir = root.join("images");
+        fs::create_dir_all(&image_dir).expect("create image dir");
+
+        let markdown_path = root.join("note.md");
+        fs::write(&markdown_path, "# note").expect("write markdown file");
+
+        let image_path = image_dir.join("diagram.png");
+        fs::write(&image_path, [137u8, 80, 78, 71]).expect("write image file");
+
+        let start = sessions
+            .start_session(
+                BufferSnapshot {
+                    bufnr: 88,
+                    changedtick: 1,
+                    markdown: String::from("![diagram](images/diagram.png)"),
+                    cursor_line: 1,
+                    cursor_col: 0,
+                    source_path: Some(markdown_path.to_string_lossy().to_string()),
+                },
+                &renderer,
+            )
+            .await;
+
+        let resolved = sessions
+            .resolve_local_asset_path(88, &start.token, "images/diagram.png")
+            .await
+            .expect("resolve relative image");
+        assert_eq!(resolved, image_path.canonicalize().expect("canonical path"));
+
+        let encoded = sessions
+            .resolve_local_asset_path(88, &start.token, "images/diagram%2Epng")
+            .await;
+        assert!(encoded.is_some());
+
+        let escaped = sessions
+            .resolve_local_asset_path(88, &start.token, "../secret.png")
+            .await;
+        assert!(escaped.is_none());
+
+        let remote = sessions
+            .resolve_local_asset_path(88, &start.token, "https://example.com/image.png")
+            .await;
+        assert!(remote.is_none());
+
+        let invalid_token = sessions
+            .resolve_local_asset_path(88, "bad-token", "images/diagram.png")
+            .await;
+        assert!(invalid_token.is_none());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -199,7 +199,7 @@ fn render_start_tag(
             id: _,
         } => {
             out.push_str("<img src=\"");
-            push_escaped_attr(out, &sanitize_url(dest_url.as_ref()));
+            push_escaped_attr(out, &sanitize_image_url(dest_url.as_ref()));
             out.push_str("\" alt=\"");
             if title.is_empty() {
                 image_titles.push(None);
@@ -594,6 +594,23 @@ fn sanitize_url(url: &str) -> String {
     trimmed.to_string()
 }
 
+fn sanitize_image_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return String::from("#");
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("javascript:") || lower.starts_with("vbscript:") {
+        return String::from("#");
+    }
+    if lower.starts_with("data:") && !lower.starts_with("data:image/") {
+        return String::from("#");
+    }
+
+    trimmed.to_string()
+}
+
 fn heading_level_number(level: HeadingLevel) -> u8 {
     match level {
         HeadingLevel::H1 => 1,
@@ -643,6 +660,17 @@ mod tests {
         let markdown = "[x](javascript:alert(1))";
         let html = renderer.render(markdown);
         assert!(html.contains("href=\"#\""));
+    }
+
+    #[test]
+    fn sanitizes_image_urls_for_browser_rendering() {
+        let renderer = MarkdownRenderer::default();
+        let markdown = "![ok](images/diagram.png) ![data](data:image/png;base64,AAAA) ![bad](javascript:alert(1))";
+        let html = renderer.render(markdown);
+
+        assert!(html.contains("src=\"images/diagram.png\""));
+        assert!(html.contains("src=\"data:image/png;base64,AAAA\""));
+        assert!(html.contains("src=\"#\""));
     }
 
     #[test]

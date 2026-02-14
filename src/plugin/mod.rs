@@ -187,6 +187,7 @@ mod tests {
             markdown: String::from("# hello"),
             cursor_line: 1,
             cursor_col: 0,
+            source_path: None,
         };
 
         let started = plugin
