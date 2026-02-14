@@ -7,28 +7,26 @@ Real-time Markdown preview for Neovim, powered by Rust.
 ## Features
 
 - Live preview without saving files
-- Save-triggered re-render (`BufWritePost`)
-- Cursor-synced scrolling via line anchors (`data-line`)
+- Cursor-synced scrolling
 - Local image rendering from markdown-relative paths
 - Smooth auto-scroll cursor following
 - SSE updates with reconnect-safe snapshot flow
 - `:MarkdownRenderStart`, `:MarkdownRenderStop`, `:MarkdownRenderToggle`, `:MarkdownRenderOpen`
-- Localhost-only server with buffer-scoped sessions for `/snapshot` and `/events`
 
 ## Requirements
 
 - Neovim `>= 0.10`
-- Rust toolchain (`cargo`)
+- Cargo (*if you want to build it yourself*)
 
 ## Install
 
-Use your plugin manager and run the build helper so the native module is copied to `lua/markdown_render_native.so` (or `.dll` on Windows).
+The repo comes bundled with the Binary, if you want to build it yourself run the build helper so the native module is copied to `lua/markdown_render_native.so`.
 
 ### lazy.nvim example
 
 ```lua
 {
-  "<you>/markdown-render",
+  "pompos02/markdown-render",
   build = "./scripts/build-nvim-module.sh release",
   config = function()
     require("markdown_render").setup({
@@ -44,20 +42,6 @@ Use your plugin manager and run the build helper so the native module is copied 
 }
 ```
 
-You can also rely on auto-setup by setting `vim.g.markdown_render` before plugin load:
-
-```lua
-vim.g.markdown_render = {
-  auto_scroll = true,
-}
-```
-
-Disable auto-setup with:
-
-```lua
-vim.g.markdown_render_disable_auto_setup = true
-```
-
 ## Commands
 
 - `:MarkdownRenderStart` - start preview for current buffer
@@ -66,17 +50,6 @@ vim.g.markdown_render_disable_auto_setup = true
 - `:MarkdownRenderToggle` - toggle preview for current buffer
 - `:MarkdownRenderOpen` - print current preview URL
 
-## Configuration
-
-`setup({...})` keys:
-
-- `port` (`6419`)
-- `debounce_ms_content` (`100`)
-- `throttle_ms_cursor` (`24`)
-- `bind_address` (`"127.0.0.1"`)
-- `auto_scroll` (`true`)
-- `scroll_comfort_top` (`0.25`)
-- `scroll_comfort_bottom` (`0.65`)
 
 ## Development
 
