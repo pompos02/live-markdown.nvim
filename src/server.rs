@@ -104,7 +104,7 @@ impl ServerController {
                 .await;
 
             if let Err(err) = server {
-                eprintln!("markdown-render server stopped with error: {err}");
+                eprintln!("live-markdown.nvim server stopped with error: {err}");
             }
         });
 

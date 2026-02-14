@@ -1,7 +1,7 @@
-use markdown_render_native::plugin::MarkdownRenderPlugin;
-use markdown_render_native::plugin::commands::markdown_render_start;
-use markdown_render_native::server::ServerConfig;
-use markdown_render_native::session::BufferSnapshot;
+use live_markdown_native::plugin::LiveMarkdownPlugin;
+use live_markdown_native::plugin::commands::live_markdown_start;
+use live_markdown_native::server::ServerConfig;
+use live_markdown_native::session::BufferSnapshot;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -21,11 +21,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let markdown = if let Some(path) = args.get(1) {
         fs::read_to_string(path)?
     } else {
-        String::from("# Markdown Render\n\nOpen a file path argument to preview file contents.")
+        String::from("# Live Markdown\n\nOpen a file path argument to preview file contents.")
     };
 
-    let plugin = MarkdownRenderPlugin::new(ServerConfig::default());
-    let url = markdown_render_start(
+    let plugin = LiveMarkdownPlugin::new(ServerConfig::default());
+    let url = live_markdown_start(
         &plugin,
         BufferSnapshot {
             bufnr: 1,
@@ -47,6 +47,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn print_help() {
-    println!("markdown-render [path/to/file.md]");
+    println!("live-markdown.nvim [path/to/file.md]");
     println!("Starts preview server and serves live markdown snapshot for the provided file.");
 }

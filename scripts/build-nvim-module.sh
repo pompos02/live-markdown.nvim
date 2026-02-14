@@ -14,16 +14,16 @@ fi
 
 case "$(uname -s)" in
     Linux)
-        source_name="libmarkdown_render_native.so"
-        target_name="markdown_render_native.so"
+        source_name="liblive_markdown_native.so"
+        target_name="live_markdown_native.so"
         ;;
     Darwin)
-        source_name="libmarkdown_render_native.dylib"
-        target_name="markdown_render_native.so"
+        source_name="liblive_markdown_native.dylib"
+        target_name="live_markdown_native.so"
         ;;
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
-        source_name="markdown_render_native.dll"
-        target_name="markdown_render_native.dll"
+        source_name="live_markdown_native.dll"
+        target_name="live_markdown_native.dll"
         ;;
     *)
         echo "unsupported platform: $(uname -s)" >&2

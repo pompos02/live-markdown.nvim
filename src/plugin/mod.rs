@@ -2,7 +2,7 @@ pub mod autocmd;
 pub mod commands;
 
 use crate::protocol::SessionEndReason;
-use crate::render::MarkdownRenderer;
+use crate::render::LiveMarkdownRenderer;
 use crate::server::{ServerConfig, ServerController};
 use crate::session::{BufferSnapshot, SessionManager};
 use std::error::Error;
@@ -31,20 +31,20 @@ impl From<std::io::Error> for PluginError {
 }
 
 #[derive(Debug, Clone)]
-pub struct MarkdownRenderPlugin {
-    renderer: MarkdownRenderer,
+pub struct LiveMarkdownPlugin {
+    renderer: LiveMarkdownRenderer,
     sessions: SessionManager,
     server: ServerController,
     autocmd: autocmd::AutocmdGate,
 }
 
-impl Default for MarkdownRenderPlugin {
+impl Default for LiveMarkdownPlugin {
     fn default() -> Self {
         Self::new(ServerConfig::default())
     }
 }
 
-impl MarkdownRenderPlugin {
+impl LiveMarkdownPlugin {
     pub fn new(config: ServerConfig) -> Self {
         let sessions = SessionManager::default();
         let server = ServerController::new(config.clone(), sessions.clone());
@@ -54,7 +54,7 @@ impl MarkdownRenderPlugin {
         );
 
         Self {
-            renderer: MarkdownRenderer::default(),
+            renderer: LiveMarkdownRenderer::default(),
             sessions,
             server,
             autocmd,
@@ -168,13 +168,13 @@ impl MarkdownRenderPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::MarkdownRenderPlugin;
+    use super::LiveMarkdownPlugin;
     use crate::server::ServerConfig;
     use crate::session::BufferSnapshot;
 
     #[tokio::test]
     async fn toggle_starts_and_stops_session() {
-        let plugin = MarkdownRenderPlugin::new(ServerConfig::default());
+        let plugin = LiveMarkdownPlugin::new(ServerConfig::default());
 
         let buffer = BufferSnapshot {
             bufnr: 5,

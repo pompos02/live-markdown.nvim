@@ -1,10 +1,10 @@
 [package]
-name = "markdown-render"
+name = "live-markdown-nvim"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "markdown_render_native"
+name = "live_markdown_native"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

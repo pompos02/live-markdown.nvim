@@ -1,4 +1,4 @@
-use crate::plugin::MarkdownRenderPlugin;
+use crate::plugin::LiveMarkdownPlugin;
 use crate::server::ServerConfig;
 use crate::session::BufferSnapshot;
 use nvim_oxi::api;
@@ -16,20 +16,20 @@ static CALLBACKS_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct AppState {
-    plugin: MarkdownRenderPlugin,
+    plugin: LiveMarkdownPlugin,
     runtime: Runtime,
 }
 
 impl AppState {
     fn new(config: ServerConfig) -> std::result::Result<Self, String> {
         let runtime = Builder::new_multi_thread()
-            .thread_name("markdown-render")
+            .thread_name("live-markdown.nvim")
             .enable_all()
             .build()
             .map_err(|err| format!("failed to start runtime: {err}"))?;
 
         Ok(Self {
-            plugin: MarkdownRenderPlugin::new(config),
+            plugin: LiveMarkdownPlugin::new(config),
             runtime,
         })
     }
@@ -183,7 +183,7 @@ pub fn module() -> Result<Dictionary> {
 
 fn setup(opts: Option<Dictionary>) {
     if let Err(err) = setup_impl(opts) {
-        notify_err(&format!("[markdown-render] setup failed: {err}"));
+        notify_err(&format!("[live-markdown.nvim] setup failed: {err}"));
     }
 }
 
@@ -194,7 +194,7 @@ fn setup_impl(opts: Option<Dictionary>) -> Result<()> {
     let state = match AppState::new(config) {
         Ok(state) => Arc::new(state),
         Err(err) => {
-            notify_err(&format!("[markdown-render] {err}"));
+            notify_err(&format!("[live-markdown.nvim] {err}"));
             return Ok(());
         }
     };
@@ -209,65 +209,65 @@ fn setup_impl(opts: Option<Dictionary>) -> Result<()> {
 
 fn start(_: ()) {
     let Some(state) = state() else {
-        notify_err("[markdown-render] plugin is not configured");
+        notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
     match state.start_current() {
-        Ok(url) => notify_info(&format!("[markdown-render] preview started: {url}")),
-        Err(err) => notify_err(&format!("[markdown-render] {err}")),
+        Ok(url) => notify_info(&format!("[live-markdown.nvim] preview started: {url}")),
+        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
 
 fn stop(all: Option<bool>) {
     let Some(state) = state() else {
-        notify_err("[markdown-render] plugin is not configured");
+        notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
     if all.unwrap_or(false) {
         state.stop_all();
-        notify_info("[markdown-render] stopped all preview sessions");
+        notify_info("[live-markdown.nvim] stopped all preview sessions");
         return;
     }
 
     match state.stop_current() {
-        Ok(true) => notify_info("[markdown-render] stopped current preview session"),
-        Ok(false) => notify_info("[markdown-render] no active preview for current buffer"),
-        Err(err) => notify_err(&format!("[markdown-render] {err}")),
+        Ok(true) => notify_info("[live-markdown.nvim] stopped current preview session"),
+        Ok(false) => notify_info("[live-markdown.nvim] no active preview for current buffer"),
+        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
 
 fn toggle(_: ()) {
     let Some(state) = state() else {
-        notify_err("[markdown-render] plugin is not configured");
+        notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
     match state.toggle_current() {
-        Ok(Some(url)) => notify_info(&format!("[markdown-render] preview started: {url}")),
-        Ok(None) => notify_info("[markdown-render] preview stopped"),
-        Err(err) => notify_err(&format!("[markdown-render] {err}")),
+        Ok(Some(url)) => notify_info(&format!("[live-markdown.nvim] preview started: {url}")),
+        Ok(None) => notify_info("[live-markdown.nvim] preview stopped"),
+        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
 
 fn open(_: ()) {
     let Some(state) = state() else {
-        notify_err("[markdown-render] plugin is not configured");
+        notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
     match state.open_current() {
-        Ok(Some(url)) => notify_info(&format!("[markdown-render] preview URL: {url}")),
-        Ok(None) => notify_info("[markdown-render] no active preview for current buffer"),
-        Err(err) => notify_err(&format!("[markdown-render] {err}")),
+        Ok(Some(url)) => notify_info(&format!("[live-markdown.nvim] preview URL: {url}")),
+        Ok(None) => notify_info("[live-markdown.nvim] no active preview for current buffer"),
+        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
 
 fn shutdown(_: ()) {
     if let Some(state) = take_state() {
         state.shutdown();
-        notify_info("[markdown-render] plugin shut down");
+        notify_info("[live-markdown.nvim] plugin shut down");
     }
 }
 
@@ -288,7 +288,7 @@ fn register_commands() -> Result<()> {
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("MarkdownRenderStart", command_start, &start_opts)?;
+    api::create_user_command("LiveMarkdownStart", command_start, &start_opts)?;
 
     let stop_opts = CreateCommandOpts::builder()
         .bang(true)
@@ -296,28 +296,28 @@ fn register_commands() -> Result<()> {
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("MarkdownRenderStop", command_stop, &stop_opts)?;
+    api::create_user_command("LiveMarkdownStop", command_stop, &stop_opts)?;
 
     let toggle_opts = CreateCommandOpts::builder()
         .desc("Toggle markdown preview for current buffer")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("MarkdownRenderToggle", command_toggle, &toggle_opts)?;
+    api::create_user_command("LiveMarkdownToggle", command_toggle, &toggle_opts)?;
 
     let open_opts = CreateCommandOpts::builder()
         .desc("Show markdown preview URL")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("MarkdownRenderOpen", command_open, &open_opts)?;
+    api::create_user_command("LiveMarkdownOpen", command_open, &open_opts)?;
 
     Ok(())
 }
 
 fn register_autocmds() -> Result<()> {
     let augroup = CreateAugroupOpts::builder().clear(true).build();
-    let group_id = api::create_augroup("MarkdownRender", &augroup)?;
+    let group_id = api::create_augroup("LiveMarkdown", &augroup)?;
 
     let text_opts = CreateAutocmdOpts::builder()
         .group(group_id)

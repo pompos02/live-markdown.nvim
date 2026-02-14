@@ -1,8 +1,8 @@
-# markdown-render
+# live-markdown.nvim
 
 Real-time Markdown preview for Neovim, powered by Rust.
 
-`markdown-render` starts a local HTTP server, renders your active Markdown buffer, and keeps the browser preview synced with both edits and cursor movement.
+`live-markdown.nvim` starts a local HTTP server, renders your active Markdown buffer, and keeps the browser preview synced with both edits and cursor movement.
 
 ## Features
 
@@ -11,7 +11,7 @@ Real-time Markdown preview for Neovim, powered by Rust.
 - Local image rendering from markdown-relative paths
 - Smooth auto-scroll cursor following
 - SSE updates with reconnect-safe snapshot flow
-- `:MarkdownRenderStart`, `:MarkdownRenderStop`, `:MarkdownRenderToggle`, `:MarkdownRenderOpen`
+- `:LiveMarkdownStart`, `:LiveMarkdownStop`, `:LiveMarkdownToggle`, `:LiveMarkdownOpen`
 
 ## Requirements
 
@@ -20,16 +20,16 @@ Real-time Markdown preview for Neovim, powered by Rust.
 
 ## Install
 
-The repo comes bundled with the Binary, if you want to build it yourself run the build helper so the native module is copied to `lua/markdown_render_native.so`.
+The repo comes bundled with the Binary, if you want to build it yourself run the build helper so the native module is copied to `lua/live_markdown_native.so`.
 
 ### lazy.nvim example
 
 ```lua
 {
-  "pompos02/markdown-render",
+  "pompos02/live-markdown.nvim",
   build = "./scripts/build-nvim-module.sh release",
   config = function()
-    require("markdown_render").setup({
+    require("live_markdown").setup({
       port = 6419,
       debounce_ms_content = 100,
       throttle_ms_cursor = 24,
@@ -44,11 +44,11 @@ The repo comes bundled with the Binary, if you want to build it yourself run the
 
 ## Commands
 
-- `:MarkdownRenderStart` - start preview for current buffer
-- `:MarkdownRenderStop` - stop preview for current buffer
-- `:MarkdownRenderStop!` - stop all active preview sessions
-- `:MarkdownRenderToggle` - toggle preview for current buffer
-- `:MarkdownRenderOpen` - print current preview URL
+- `:LiveMarkdownStart` - start preview for current buffer
+- `:LiveMarkdownStop` - stop preview for current buffer
+- `:LiveMarkdownStop!` - stop all active preview sessions
+- `:LiveMarkdownToggle` - toggle preview for current buffer
+- `:LiveMarkdownOpen` - print current preview URL
 
 
 ## Development

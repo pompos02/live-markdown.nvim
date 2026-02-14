@@ -1,5 +1,5 @@
 use crate::protocol::{ServerEvent, SessionEndReason, SnapshotResponse};
-use crate::render::MarkdownRenderer;
+use crate::render::LiveMarkdownRenderer;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -76,7 +76,7 @@ impl Default for SessionManager {
 }
 
 impl SessionManager {
-    pub async fn start_session(&self, snapshot: BufferSnapshot, renderer: &MarkdownRenderer) {
+    pub async fn start_session(&self, snapshot: BufferSnapshot, renderer: &LiveMarkdownRenderer) {
         let rendered_html = renderer.render(&snapshot.markdown);
         let content_hash = content_hash(&snapshot.markdown);
 
@@ -163,7 +163,7 @@ impl SessionManager {
     pub async fn update_content(
         &self,
         snapshot: BufferSnapshot,
-        renderer: &MarkdownRenderer,
+        renderer: &LiveMarkdownRenderer,
     ) -> bool {
         let new_hash = content_hash(&snapshot.markdown);
 
@@ -207,7 +207,7 @@ impl SessionManager {
     pub async fn rerender_content(
         &self,
         snapshot: BufferSnapshot,
-        renderer: &MarkdownRenderer,
+        renderer: &LiveMarkdownRenderer,
     ) -> bool {
         let rendered_html = renderer.render(&snapshot.markdown);
         let new_hash = content_hash(&snapshot.markdown);
@@ -479,7 +479,7 @@ fn is_supported_image_path(path: &Path) -> bool {
 mod tests {
     use super::{BufferSnapshot, LifecycleState, SessionManager};
     use crate::protocol::{ServerEvent, SessionEndReason};
-    use crate::render::MarkdownRenderer;
+    use crate::render::LiveMarkdownRenderer;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -489,13 +489,13 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        std::env::temp_dir().join(format!("markdown-render-{name}-{nanos}"))
+        std::env::temp_dir().join(format!("live-markdown.nvim-{name}-{nanos}"))
     }
 
     #[tokio::test]
     async fn session_start_update_and_stop_lifecycle() {
         let sessions = SessionManager::default();
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
 
         sessions
             .start_session(
@@ -538,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn cursor_updates_ignore_duplicates() {
         let sessions = SessionManager::default();
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
 
         sessions
             .start_session(
@@ -562,7 +562,7 @@ mod tests {
     #[tokio::test]
     async fn subscription_requires_active_session() {
         let sessions = SessionManager::default();
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
 
         sessions
             .start_session(
@@ -606,7 +606,7 @@ mod tests {
     #[tokio::test]
     async fn rerender_content_forces_emit_without_text_changes() {
         let sessions = SessionManager::default();
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
 
         sessions
             .start_session(
@@ -658,7 +658,7 @@ mod tests {
     #[tokio::test]
     async fn resolves_image_asset_paths_from_buffer_directory() {
         let sessions = SessionManager::default();
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
 
         let root = temp_test_dir("assets");
         let image_dir = root.join("images");

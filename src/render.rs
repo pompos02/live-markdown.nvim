@@ -6,11 +6,11 @@ use pulldown_cmark::{
 };
 
 #[derive(Debug, Clone)]
-pub struct MarkdownRenderer {
+pub struct LiveMarkdownRenderer {
     options: Options,
 }
 
-impl Default for MarkdownRenderer {
+impl Default for LiveMarkdownRenderer {
     fn default() -> Self {
         let mut options = Options::empty();
         options.insert(Options::all());
@@ -18,7 +18,7 @@ impl Default for MarkdownRenderer {
     }
 }
 
-impl MarkdownRenderer {
+impl LiveMarkdownRenderer {
     pub fn render(&self, markdown: &str) -> String {
         let mut output = String::with_capacity(markdown.len().saturating_mul(2) + 128);
         output.push_str("<article id=\"md-root\">");
@@ -680,11 +680,11 @@ fn push_escaped_attr(out: &mut String, text: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::MarkdownRenderer;
+    use super::LiveMarkdownRenderer;
 
     #[test]
     fn renders_common_markdown_blocks() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "# Heading\n\n- one\n- two\n\n`code`";
         let html = renderer.render(markdown);
 
@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn renders_gfm_alert_block_quotes_with_titles_and_icons() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "> [!NOTE]\n> note body\n\n> [!TIP]\n> tip body\n\n> [!IMPORTANT]\n> important body\n\n> [!WARNING]\n> warning body\n\n> [!CAUTION]\n> caution body";
         let html = renderer.render(markdown);
 
@@ -717,7 +717,7 @@ mod tests {
 
     #[test]
     fn keeps_regular_block_quotes_without_alert_chrome() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "> plain quote";
         let html = renderer.render(markdown);
 
@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn strips_dangerous_links() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "[x](javascript:alert(1))";
         let html = renderer.render(markdown);
         assert!(html.contains("href=\"#\""));
@@ -737,7 +737,7 @@ mod tests {
 
     #[test]
     fn sanitizes_image_urls_for_browser_rendering() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "![ok](images/diagram.png) ![data](data:image/png;base64,AAAA) ![bad](javascript:alert(1))";
         let html = renderer.render(markdown);
 
@@ -748,7 +748,7 @@ mod tests {
 
     #[test]
     fn keeps_data_line_markers_monotonic() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "line 1\n\nline 3\n\nline 5";
         let html = renderer.render(markdown);
 
@@ -767,7 +767,7 @@ mod tests {
 
     #[test]
     fn adds_heading_ids_for_internal_links() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "# Overview\n## Inline HTML";
         let html = renderer.render(markdown);
 
@@ -777,7 +777,7 @@ mod tests {
 
     #[test]
     fn keeps_explicit_heading_ids() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown =
             "## Inline HTML {#html}\n## Automatic Escaping for Special Characters {#autoescape}";
         let html = renderer.render(markdown);
@@ -790,7 +790,7 @@ mod tests {
 
     #[test]
     fn deduplicates_heading_ids() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "## Section\n## Section\n## Section-1\n## Section";
         let html = renderer.render(markdown);
 
@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn infers_heading_ids_from_internal_toc_links() {
-        let renderer = MarkdownRenderer::default();
+        let renderer = LiveMarkdownRenderer::default();
         let markdown = "- [Inline HTML](#html)\n- [Automatic Escaping for Special Characters](#autoescape)\n\n## Inline HTML\n## Automatic Escaping for Special Characters";
         let html = renderer.render(markdown);
 

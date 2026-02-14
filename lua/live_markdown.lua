@@ -7,7 +7,7 @@ local function core()
         return native
     end
 
-    native = require("markdown_render_native")
+    native = require("live_markdown_native")
     return native
 end
 
