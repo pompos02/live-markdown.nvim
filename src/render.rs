@@ -13,10 +13,6 @@ pub struct MarkdownRenderer {
 impl Default for MarkdownRenderer {
     fn default() -> Self {
         let mut options = Options::empty();
-        // options.insert(Options::ENABLE_TABLES);
-        // options.insert(Options::ENABLE_TASKLISTS);
-        // options.insert(Options::ENABLE_STRIKETHROUGH);
-        // options.insert(Options::ENABLE_FOOTNOTES);
         options.insert(Options::all());
         Self { options }
     }

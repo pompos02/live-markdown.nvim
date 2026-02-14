@@ -14,6 +14,13 @@
         --text-strong: #f0f0f0;
         --text-muted: #8c8c8c;
         --accent: #b6b6b6;
+        --accent-soft: rgba(94, 176, 255, 0.18);
+        --table-head: #171b20;
+        --table-row: #11161b;
+        --table-row-alt: #101319;
+        --task-bg: #121a21;
+        --task-border: #283a4a;
+        --task-done: #7f98ab;
         --code-bg: #0b0b0b;
         --inline-bg: #171717;
         --warn-bg: #201516;
@@ -191,15 +198,48 @@
       }
 
       #md-root table {
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0;
         width: 100%;
-        background: #101010;
+        background: linear-gradient(180deg, #11161a 0%, #101318 100%);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
       }
 
       #md-root td,
       #md-root th {
-        border: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
         padding: 8px 10px;
+      }
+
+      #md-root th {
+        background: var(--table-head);
+        color: var(--text-strong);
+        text-align: left;
+        letter-spacing: 0.02em;
+      }
+
+      #md-root td {
+        background: var(--table-row);
+      }
+
+      #md-root tr:nth-child(even) td {
+        background: var(--table-row-alt);
+      }
+
+      #md-root tr:hover td {
+        background: #16222d;
+      }
+
+      #md-root tr > :last-child {
+        border-right: 0;
+      }
+
+      #md-root table tr:last-child > * {
+        border-bottom: 0;
       }
 
       #md-root hr {
@@ -210,20 +250,21 @@
       #md-root input[type="checkbox"] {
         appearance: none;
         -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
+        width: 15px;
+        height: 15px;
         border: 1.5px solid var(--text-muted);
-        border-radius: 3px;
+        border-radius: 4px;
         background: var(--bg);
         vertical-align: middle;
-        margin-right: 6px;
+        margin-right: 8px;
         cursor: default;
         position: relative;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
       }
 
       #md-root input[type="checkbox"]:checked {
-        background: var(--accent);
-        border-color: var(--accent);
+        background: #5eb0ff;
+        border-color: #5eb0ff;
       }
 
       #md-root input[type="checkbox"]:checked::after {
@@ -236,6 +277,38 @@
         border: solid var(--bg);
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);
+      }
+
+      #md-root ul,
+      #md-root ol {
+        padding-left: 1.2em;
+      }
+
+      #md-root li {
+        margin: 0.26em 0;
+      }
+
+      #md-root li.task-list-item,
+      #md-root ul.contains-task-list > li {
+        list-style: none;
+        margin-left: -0.5em;
+        padding: 0.32em 0.55em 0.35em 0.45em;
+        border: 1px solid var(--task-border);
+        border-radius: 6px;
+        background: linear-gradient(180deg, var(--task-bg), #10171e);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
+      }
+
+      #md-root li.task-list-item + li.task-list-item,
+      #md-root ul.contains-task-list > li + li {
+        margin-top: 0.42em;
+      }
+
+      #md-root li.task-list-item:has(> input[type="checkbox"]:checked),
+      #md-root ul.contains-task-list > li:has(> input[type="checkbox"]:checked) {
+        border-color: #35556e;
+        background: linear-gradient(180deg, rgba(38, 65, 87, 0.55), var(--accent-soft));
+        color: var(--task-done);
       }
 
       .warning {
