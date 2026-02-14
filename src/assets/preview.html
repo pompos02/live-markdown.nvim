@@ -356,7 +356,6 @@
         const COMFORT_TOP = Number("__SCROLL_TOP__");
         const COMFORT_BOTTOM = Number("__SCROLL_BOTTOM__");
         const FOLLOW_RATIO = Math.max(0.05, Math.min(0.95, (COMFORT_TOP + COMFORT_BOTTOM) / 2));
-        const REDUCE_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
         const statusLine = document.getElementById("status-line");
         const warning = document.getElementById("warning");
@@ -785,20 +784,29 @@
             followLastTs = ts;
           }
 
-          const dt = Math.max(0.5, Math.min(2, (ts - followLastTs) / 16.6667));
+          const dt = Math.max(1 / 120, Math.min(1 / 20, (ts - followLastTs) / 1000));
           followLastTs = ts;
 
           const currentTop = getScrollTop();
-          const distance = followTargetTop - currentTop;
+          const targetTop = clampScrollTop(followTargetTop);
+          const distance = targetTop - currentTop;
 
-          followVelocity += distance * 0.15 * dt;
-          followVelocity *= Math.pow(0.72, dt);
+          const distanceAbs = Math.abs(distance);
+          const t = Math.min(1, distanceAbs / 1200);
+          const responsiveness = 8 + 10 * t;
+          const maxSpeed = 22200 + 7800 * t * t;
+          const alpha = 1 - Math.exp(-responsiveness * dt);
+          const unclampedStep = distance * alpha;
+          const maxStep = maxSpeed * dt;
+          const step = Math.max(-maxStep, Math.min(maxStep, unclampedStep));
+          const nextTop = clampScrollTop(currentTop + step);
 
-          const nextTop = clampScrollTop(currentTop + followVelocity * dt);
+          followVelocity = step / dt;
+
           window.scrollTo({ top: nextTop, behavior: "auto" });
 
-          if (Math.abs(distance) < 0.45 && Math.abs(followVelocity) < 0.45) {
-            window.scrollTo({ top: clampScrollTop(followTargetTop), behavior: "auto" });
+          if (Math.abs(distance) < 0.6) {
+            window.scrollTo({ top: targetTop, behavior: "auto" });
             stopFollowAnimation();
             return;
           }
@@ -809,7 +817,7 @@
         function animateToScrollTop(targetTop, force) {
           const clampedTarget = clampScrollTop(targetTop);
 
-          if (force || REDUCE_MOTION) {
+          if (force) {
             followTargetTop = clampedTarget;
             stopFollowAnimation();
             window.scrollTo({ top: clampedTarget, behavior: "auto" });
