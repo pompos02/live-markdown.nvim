@@ -66,20 +66,15 @@ impl MarkdownRenderPlugin {
     }
 
     pub async fn has_session(&self, bufnr: i64) -> bool {
-        self.sessions.session_token(bufnr).await.is_some()
+        self.sessions.has_session(bufnr).await
     }
 
     pub async fn start_preview(&self, snapshot: BufferSnapshot) -> Result<String, PluginError> {
         let addr = self.server.ensure_running().await?;
-        let started = self.sessions.start_session(snapshot, &self.renderer).await;
+        let bufnr = snapshot.bufnr;
+        self.sessions.start_session(snapshot, &self.renderer).await;
 
-        let url = format!(
-            "http://{}:{}/?token={}&buf={}",
-            addr.ip(),
-            addr.port(),
-            started.token,
-            started.bufnr
-        );
+        let url = format!("http://{}:{}/?buf={bufnr}", addr.ip(), addr.port(),);
 
         Ok(url)
     }
@@ -107,7 +102,7 @@ impl MarkdownRenderPlugin {
         &self,
         snapshot: BufferSnapshot,
     ) -> Result<Option<String>, PluginError> {
-        if self.sessions.session_token(snapshot.bufnr).await.is_some() {
+        if self.sessions.has_session(snapshot.bufnr).await {
             let _ = self.stop_preview(snapshot.bufnr).await?;
             return Ok(None);
         }
@@ -116,12 +111,12 @@ impl MarkdownRenderPlugin {
     }
 
     pub async fn open_preview(&self, bufnr: i64) -> Result<Option<String>, PluginError> {
-        let Some(token) = self.sessions.session_token(bufnr).await else {
+        if !self.sessions.has_session(bufnr).await {
             return Ok(None);
-        };
+        }
 
         self.server.ensure_running().await?;
-        Ok(self.server.preview_url_for(bufnr, &token).await)
+        Ok(self.server.preview_url_for(bufnr).await)
     }
 
     pub async fn on_text_changed(&self, snapshot: BufferSnapshot) {

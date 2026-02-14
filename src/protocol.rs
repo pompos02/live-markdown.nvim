@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SessionQuery {
-    pub token: String,
     pub buf: i64,
 }
 

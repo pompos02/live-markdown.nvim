@@ -134,13 +134,9 @@ impl ServerController {
         self.runtime.lock().await.addr
     }
 
-    pub async fn preview_url_for(&self, bufnr: i64, token: &str) -> Option<String> {
+    pub async fn preview_url_for(&self, bufnr: i64) -> Option<String> {
         let addr = self.bound_addr().await?;
-        Some(format!(
-            "http://{}:{}/?token={token}&buf={bufnr}",
-            addr.ip(),
-            addr.port()
-        ))
+        Some(format!("http://{}:{}/?buf={bufnr}", addr.ip(), addr.port()))
     }
 }
 
@@ -153,7 +149,6 @@ struct HttpState {
 
 #[derive(Debug, Clone, Deserialize)]
 struct AssetQuery {
-    token: String,
     buf: i64,
     path: String,
 }
@@ -204,16 +199,16 @@ async fn preview_shell(State(state): State<HttpState>) -> impl IntoResponse {
 }
 
 async fn snapshot(State(state): State<HttpState>, Query(query): Query<SessionQuery>) -> Response {
-    match state.sessions.snapshot(query.buf, &query.token).await {
+    match state.sessions.snapshot(query.buf).await {
         Some(snapshot) => Json(snapshot).into_response(),
-        None => json_error(StatusCode::UNAUTHORIZED, "invalid session token"),
+        None => json_error(StatusCode::NOT_FOUND, "preview session not found"),
     }
 }
 
 async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) -> Response {
     let Some(path) = state
         .sessions
-        .resolve_local_asset_path(query.buf, &query.token, &query.path)
+        .resolve_local_asset_path(query.buf, &query.path)
         .await
     else {
         return StatusCode::NOT_FOUND.into_response();
@@ -241,12 +236,8 @@ async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) 
 
 async fn events(State(state): State<HttpState>, Query(query): Query<SessionQuery>) -> Response {
     let client_id = state.next_client_id();
-    let Some(mut rx) = state
-        .sessions
-        .subscribe(query.buf, &query.token, client_id)
-        .await
-    else {
-        return json_error(StatusCode::UNAUTHORIZED, "invalid session token");
+    let Some(mut rx) = state.sessions.subscribe(query.buf, client_id).await else {
+        return json_error(StatusCode::NOT_FOUND, "preview session not found");
     };
 
     let sessions = state.sessions.clone();

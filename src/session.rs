@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{RwLock, broadcast};
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
@@ -29,12 +28,6 @@ pub struct BufferSnapshot {
     pub source_path: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-pub struct SessionStartInfo {
-    pub bufnr: i64,
-    pub token: String,
-}
-
 #[derive(Debug)]
 struct Session {
     bufnr: i64,
@@ -43,7 +36,6 @@ struct Session {
     cursor_line: usize,
     cursor_col: usize,
     subscribers: HashSet<ClientId>,
-    token: String,
     html: String,
     source_path: Option<PathBuf>,
     state: LifecycleState,
@@ -51,7 +43,7 @@ struct Session {
 }
 
 impl Session {
-    fn new(bufnr: i64, token: String) -> Self {
+    fn new(bufnr: i64) -> Self {
         let (broadcaster, _receiver) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
             bufnr,
@@ -60,7 +52,6 @@ impl Session {
             cursor_line: 1,
             cursor_col: 0,
             subscribers: HashSet::new(),
-            token,
             html: String::new(),
             source_path: None,
             state: LifecycleState::Idle,
@@ -73,7 +64,6 @@ impl Session {
 pub struct SessionManager {
     sessions: Arc<RwLock<HashMap<i64, Session>>>,
     active_bufnr: Arc<RwLock<Option<i64>>>,
-    token_counter: Arc<AtomicU64>,
 }
 
 impl Default for SessionManager {
@@ -81,24 +71,19 @@ impl Default for SessionManager {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_bufnr: Arc::new(RwLock::new(None)),
-            token_counter: Arc::new(AtomicU64::new(1)),
         }
     }
 }
 
 impl SessionManager {
-    pub async fn start_session(
-        &self,
-        snapshot: BufferSnapshot,
-        renderer: &MarkdownRenderer,
-    ) -> SessionStartInfo {
+    pub async fn start_session(&self, snapshot: BufferSnapshot, renderer: &MarkdownRenderer) {
         let rendered_html = renderer.render(&snapshot.markdown);
         let content_hash = content_hash(&snapshot.markdown);
 
         let mut sessions = self.sessions.write().await;
         let session = sessions
             .entry(snapshot.bufnr)
-            .or_insert_with(|| Session::new(snapshot.bufnr, self.generate_token()));
+            .or_insert_with(|| Session::new(snapshot.bufnr));
 
         session.state = LifecycleState::Running;
         session.changedtick = snapshot.changedtick;
@@ -114,15 +99,8 @@ impl SessionManager {
             cursor_line: snapshot.cursor_line,
         });
 
-        let info = SessionStartInfo {
-            bufnr: snapshot.bufnr,
-            token: session.token.clone(),
-        };
-
         drop(sessions);
         *self.active_bufnr.write().await = Some(snapshot.bufnr);
-
-        info
     }
 
     pub async fn stop_session(&self, bufnr: i64, reason: SessionEndReason) -> bool {
@@ -274,22 +252,15 @@ impl SessionManager {
         true
     }
 
-    pub async fn session_token(&self, bufnr: i64) -> Option<String> {
+    pub async fn has_session(&self, bufnr: i64) -> bool {
         let sessions = self.sessions.read().await;
-        sessions.get(&bufnr).map(|session| session.token.clone())
+        sessions.contains_key(&bufnr)
     }
 
-    pub async fn verify_token(&self, bufnr: i64, token: &str) -> bool {
-        let sessions = self.sessions.read().await;
-        sessions.get(&bufnr).is_some_and(|session| {
-            session.token == token && session.state != LifecycleState::Stopped
-        })
-    }
-
-    pub async fn snapshot(&self, bufnr: i64, token: &str) -> Option<SnapshotResponse> {
+    pub async fn snapshot(&self, bufnr: i64) -> Option<SnapshotResponse> {
         let sessions = self.sessions.read().await;
         let session = sessions.get(&bufnr)?;
-        if session.token != token || session.state == LifecycleState::Stopped {
+        if session.state == LifecycleState::Stopped {
             return None;
         }
 
@@ -301,15 +272,10 @@ impl SessionManager {
         })
     }
 
-    pub async fn resolve_local_asset_path(
-        &self,
-        bufnr: i64,
-        token: &str,
-        raw_path: &str,
-    ) -> Option<PathBuf> {
+    pub async fn resolve_local_asset_path(&self, bufnr: i64, raw_path: &str) -> Option<PathBuf> {
         let sessions = self.sessions.read().await;
         let session = sessions.get(&bufnr)?;
-        if session.token != token || session.state == LifecycleState::Stopped {
+        if session.state == LifecycleState::Stopped {
             return None;
         }
 
@@ -340,12 +306,11 @@ impl SessionManager {
     pub async fn subscribe(
         &self,
         bufnr: i64,
-        token: &str,
         client_id: ClientId,
     ) -> Option<broadcast::Receiver<ServerEvent>> {
         let mut sessions = self.sessions.write().await;
         let session = sessions.get_mut(&bufnr)?;
-        if session.token != token || session.state == LifecycleState::Stopped {
+        if session.state == LifecycleState::Stopped {
             return None;
         }
 
@@ -366,18 +331,6 @@ impl SessionManager {
 
     pub async fn active_bufnr(&self) -> Option<i64> {
         *self.active_bufnr.read().await
-    }
-
-    fn generate_token(&self) -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let unix_ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let counter = self.token_counter.fetch_add(1, Ordering::Relaxed);
-
-        format!("{unix_ns:x}{counter:x}")
     }
 }
 
@@ -536,7 +489,7 @@ mod tests {
         let sessions = SessionManager::default();
         let renderer = MarkdownRenderer::default();
 
-        let start = sessions
+        sessions
             .start_session(
                 BufferSnapshot {
                     bufnr: 1,
@@ -550,7 +503,6 @@ mod tests {
             )
             .await;
 
-        assert_eq!(start.bufnr, 1);
         assert_eq!(sessions.session_count().await, 1);
         assert_eq!(sessions.active_bufnr().await, Some(1));
 
@@ -600,11 +552,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn subscription_requires_valid_token() {
+    async fn subscription_requires_active_session() {
         let sessions = SessionManager::default();
         let renderer = MarkdownRenderer::default();
 
-        let start = sessions
+        sessions
             .start_session(
                 BufferSnapshot {
                     bufnr: 3,
@@ -618,12 +570,9 @@ mod tests {
             )
             .await;
 
-        let mut rx = sessions
-            .subscribe(3, &start.token, 99)
-            .await
-            .expect("valid subscription");
+        let mut rx = sessions.subscribe(3, 99).await.expect("valid subscription");
 
-        assert!(sessions.subscribe(3, "bad-token", 100).await.is_none());
+        assert!(sessions.subscribe(99, 100).await.is_none());
         assert!(sessions.update_cursor(3, 4, 0).await);
 
         let event = rx.recv().await.expect("event");
@@ -636,14 +585,14 @@ mod tests {
         }
 
         sessions.pause_session(3).await;
-        assert!(sessions.verify_token(3, &start.token).await);
+        assert!(sessions.has_session(3).await);
 
         sessions.resume_session(3).await;
         assert_eq!(sessions.active_bufnr().await, Some(3));
 
         sessions.stop_all(SessionEndReason::Stopped).await;
         assert_eq!(sessions.session_count().await, 0);
-        assert!(!sessions.verify_token(3, &start.token).await);
+        assert!(!sessions.has_session(3).await);
     }
 
     #[tokio::test]
@@ -651,7 +600,7 @@ mod tests {
         let sessions = SessionManager::default();
         let renderer = MarkdownRenderer::default();
 
-        let start = sessions
+        sessions
             .start_session(
                 BufferSnapshot {
                     bufnr: 4,
@@ -666,7 +615,7 @@ mod tests {
             .await;
 
         let mut rx = sessions
-            .subscribe(4, &start.token, 777)
+            .subscribe(4, 777)
             .await
             .expect("valid subscription");
 
@@ -713,7 +662,7 @@ mod tests {
         let image_path = image_dir.join("diagram.png");
         fs::write(&image_path, [137u8, 80, 78, 71]).expect("write image file");
 
-        let start = sessions
+        sessions
             .start_session(
                 BufferSnapshot {
                     bufnr: 88,
@@ -728,30 +677,28 @@ mod tests {
             .await;
 
         let resolved = sessions
-            .resolve_local_asset_path(88, &start.token, "images/diagram.png")
+            .resolve_local_asset_path(88, "images/diagram.png")
             .await
             .expect("resolve relative image");
         assert_eq!(resolved, image_path.canonicalize().expect("canonical path"));
 
         let encoded = sessions
-            .resolve_local_asset_path(88, &start.token, "images/diagram%2Epng")
+            .resolve_local_asset_path(88, "images/diagram%2Epng")
             .await;
         assert!(encoded.is_some());
 
-        let escaped = sessions
-            .resolve_local_asset_path(88, &start.token, "../secret.png")
-            .await;
+        let escaped = sessions.resolve_local_asset_path(88, "../secret.png").await;
         assert!(escaped.is_none());
 
         let remote = sessions
-            .resolve_local_asset_path(88, &start.token, "https://example.com/image.png")
+            .resolve_local_asset_path(88, "https://example.com/image.png")
             .await;
         assert!(remote.is_none());
 
-        let invalid_token = sessions
-            .resolve_local_asset_path(88, "bad-token", "images/diagram.png")
+        let missing_session = sessions
+            .resolve_local_asset_path(99, "images/diagram.png")
             .await;
-        assert!(invalid_token.is_none());
+        assert!(missing_session.is_none());
 
         let _ = fs::remove_dir_all(root);
     }

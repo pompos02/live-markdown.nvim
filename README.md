@@ -13,7 +13,7 @@ Real-time Markdown preview for Neovim, powered by Rust.
 - Smooth auto-scroll cursor following
 - SSE updates with reconnect-safe snapshot flow
 - `:MarkdownRenderStart`, `:MarkdownRenderStop`, `:MarkdownRenderToggle`, `:MarkdownRenderOpen`
-- Localhost-only server with per-session tokens for `/snapshot` and `/events`
+- Localhost-only server with buffer-scoped sessions for `/snapshot` and `/events`
 
 ## Requirements
 

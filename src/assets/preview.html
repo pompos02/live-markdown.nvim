@@ -371,7 +371,6 @@
         let followLastTs = 0;
 
         const search = new URLSearchParams(window.location.search);
-        const token = search.get("token");
         const bufnr = search.get("buf");
 
         const LANGUAGE_ALIASES = Object.freeze({
@@ -430,8 +429,8 @@
         const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
         const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
 
-        if (!token || !bufnr) {
-          setStatus("Missing token or buffer id");
+        if (!bufnr) {
+          setStatus("Missing buffer id");
           showWarning("Preview URL is missing required query parameters.");
           return;
         }
@@ -513,7 +512,6 @@
             }
 
             const params = new URLSearchParams({
-              token,
               buf: bufnr,
               path: normalizedPath,
             });
@@ -924,7 +922,7 @@
         }
 
         async function loadSnapshot() {
-          const response = await fetch(`/snapshot?token=${encodeURIComponent(token)}&buf=${encodeURIComponent(bufnr)}`);
+          const response = await fetch(`/snapshot?buf=${encodeURIComponent(bufnr)}`);
           if (!response.ok) {
             throw new Error(`snapshot_http_${response.status}`);
           }
@@ -940,7 +938,7 @@
             source.close();
           }
 
-          source = new EventSource(`/events?token=${encodeURIComponent(token)}&buf=${encodeURIComponent(bufnr)}`);
+          source = new EventSource(`/events?buf=${encodeURIComponent(bufnr)}`);
 
           source.addEventListener("render_full", (event) => {
             const payload = readPayload(event);
@@ -1016,7 +1014,7 @@
             connectEvents();
           } catch (_error) {
             setStatus("Unable to load snapshot");
-            showWarning("Failed to fetch initial preview snapshot. Check token and active session.");
+            showWarning("Failed to fetch initial preview snapshot. Check buffer id and active session.");
           }
         })();
       })();
