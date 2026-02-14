@@ -264,11 +264,19 @@ impl SessionManager {
             return None;
         }
 
+        let filename = session
+            .source_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| "buffer".to_string());
+
         Some(SnapshotResponse {
             bufnr: session.bufnr,
             html: session.html.clone(),
             cursor_line: session.cursor_line,
             cursor_col: session.cursor_col,
+            filename,
         })
     }
 

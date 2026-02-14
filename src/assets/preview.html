@@ -51,25 +51,37 @@
         padding: 18px 14px 28px;
       }
 
-      .status-card {
-        border: 1px solid var(--border);
-        background: transparent;
-        border-radius: 4px;
-        padding: 8px 10px;
-        margin-bottom: 10px;
+      .preview-header {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 10px;
+        margin: 2px 0 12px;
       }
 
-      .status-title {
+      .filename-line {
+        grid-column: 2;
         margin: 0;
-        font-size: 0.74rem;
-        letter-spacing: 0.04em;
-        color: var(--text-muted);
+        color: var(--text-strong);
+        font-size: 1.55rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .status-line {
-        margin: 4px 0 0;
-        color: var(--text-strong);
-        font-size: 0.84rem;
+        grid-column: 3;
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        flex: 0 0 auto;
+        justify-self: end;
+        text-align: right;
       }
 
       #preview-root {
@@ -411,10 +423,10 @@
   </head>
   <body>
     <main class="shell">
-      <section class="status-card">
-        <p class="status-title">Καλησπέρα</p>
+      <header class="preview-header">
+        <p id="filename-line" class="filename-line">buffer</p>
         <p id="status-line" class="status-line">Connecting...</p>
-      </section>
+      </header>
       <section id="preview-root">
         <article id="md-root">
           <p data-line="1">Waiting for snapshot...</p>
@@ -431,6 +443,7 @@
         const FOLLOW_RATIO = Math.max(0.05, Math.min(0.95, (COMFORT_TOP + COMFORT_BOTTOM) / 2));
 
         const statusLine = document.getElementById("status-line");
+        const filenameLine = document.getElementById("filename-line");
         const warning = document.getElementById("warning");
         const previewRoot = document.getElementById("preview-root");
 
@@ -512,6 +525,22 @@
 
         function setStatus(message) {
           statusLine.textContent = message;
+        }
+
+        function filenameFromPath(value) {
+          const trimmed = (value || "").trim();
+          if (!trimmed) {
+            return "buffer";
+          }
+
+          const normalized = trimmed.replaceAll("\\", "/");
+          const parts = normalized.split("/").filter(Boolean);
+          return parts[parts.length - 1] || trimmed;
+        }
+
+        function setFilename(value) {
+          const label = filenameFromPath(value);
+          filenameLine.textContent = label;
         }
 
         function showWarning(message) {
@@ -996,6 +1025,8 @@
           }
         }
 
+        let filename = "buffer";
+
         async function loadSnapshot() {
           const response = await fetch(`/snapshot?buf=${encodeURIComponent(bufnr)}`);
           if (!response.ok) {
@@ -1003,9 +1034,11 @@
           }
 
           const payload = await response.json();
+          filename = payload.filename || "buffer";
+          setFilename(filename);
           installHtml(payload.html || "<article id=\"md-root\"></article>");
           followCursorLine(payload.cursor_line, true, true);
-          setStatus(`Connected - buffer ${bufnr}`);
+          setStatus("Connected");
         }
 
         function connectEvents() {
@@ -1024,7 +1057,7 @@
             clearWarning();
             installHtml(payload.html || "<article id=\"md-root\"></article>");
             followCursorLine(payload.cursor_line, false, true);
-            setStatus(`Live - buffer ${bufnr}`);
+            setStatus("Live");
           });
 
           source.addEventListener("cursor_move", (event) => {
@@ -1047,7 +1080,7 @@
           });
 
           source.addEventListener("heartbeat", () => {
-            setStatus(`Live - buffer ${bufnr}`);
+            setStatus("Live");
           });
 
           source.onerror = () => {

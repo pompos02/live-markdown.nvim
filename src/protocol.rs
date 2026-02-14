@@ -19,6 +19,7 @@ pub struct SnapshotResponse {
     pub html: String,
     pub cursor_line: usize,
     pub cursor_col: usize,
+    pub filename: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
