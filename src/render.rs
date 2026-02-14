@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
+use pulldown_cmark::{
+    BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, MetadataBlockKind, Options, Parser, Tag,
+    TagEnd,
+};
 
 #[derive(Debug, Clone)]
 pub struct MarkdownRenderer {
@@ -63,7 +66,19 @@ impl MarkdownRenderer {
                     push_escaped_html(&mut output, text.as_ref());
                     output.push_str("</code>");
                 }
-                Event::Html(raw) => push_escaped_html(&mut output, raw.as_ref()),
+                Event::InlineMath(math) => {
+                    output.push_str("<span class=\"math-inline\">");
+                    push_escaped_html(&mut output, math.as_ref());
+                    output.push_str("</span>");
+                }
+                Event::DisplayMath(math) => {
+                    output.push_str("<div class=\"math-display\">");
+                    push_escaped_html(&mut output, math.as_ref());
+                    output.push_str("</div>");
+                }
+                Event::Html(raw) | Event::InlineHtml(raw) => {
+                    push_escaped_html(&mut output, raw.as_ref())
+                }
                 Event::FootnoteReference(label) => {
                     output.push_str("<sup>");
                     push_escaped_html(&mut output, label.as_ref());
@@ -98,7 +113,12 @@ fn render_start_tag(
 ) {
     match tag {
         Tag::Paragraph => open_block_tag(out, "p", line),
-        Tag::Heading(level, _id, _classes) => {
+        Tag::Heading {
+            level,
+            id: _,
+            classes: _,
+            attrs: _,
+        } => {
             let level = heading_level_number(level);
             out.push_str("<h");
             out.push_str(&level.to_string());
@@ -113,7 +133,17 @@ fn render_start_tag(
             out.push('>');
             *heading_index = heading_index.saturating_add(1);
         }
-        Tag::BlockQuote => open_block_tag(out, "blockquote", line),
+        Tag::BlockQuote(kind) => {
+            out.push_str("<blockquote data-line=\"");
+            out.push_str(&line.to_string());
+            out.push('"');
+            if let Some(kind) = kind {
+                out.push_str(" data-alert=\"");
+                out.push_str(block_quote_kind_name(kind));
+                out.push('"');
+            }
+            out.push('>');
+        }
         Tag::CodeBlock(kind) => {
             out.push_str("<pre data-line=\"");
             out.push_str(&line.to_string());
@@ -137,13 +167,23 @@ fn render_start_tag(
                 out.push_str("<ul>");
             }
         }
+        Tag::DefinitionList => out.push_str("<dl>"),
+        Tag::DefinitionListTitle => open_block_tag(out, "dt", line),
+        Tag::DefinitionListDefinition => open_block_tag(out, "dd", line),
         Tag::Item => open_block_tag(out, "li", line),
         Tag::Emphasis => out.push_str("<em>"),
+        Tag::Superscript => out.push_str("<sup>"),
+        Tag::Subscript => out.push_str("<sub>"),
         Tag::Strong => out.push_str("<strong>"),
         Tag::Strikethrough => out.push_str("<del>"),
-        Tag::Link(_kind, dest, title) => {
+        Tag::Link {
+            link_type: _,
+            dest_url,
+            title,
+            id: _,
+        } => {
             out.push_str("<a href=\"");
-            push_escaped_attr(out, &sanitize_url(dest.as_ref()));
+            push_escaped_attr(out, &sanitize_url(dest_url.as_ref()));
             out.push('"');
             if !title.is_empty() {
                 out.push_str(" title=\"");
@@ -152,9 +192,14 @@ fn render_start_tag(
             }
             out.push('>');
         }
-        Tag::Image(_kind, dest, title) => {
+        Tag::Image {
+            link_type: _,
+            dest_url,
+            title,
+            id: _,
+        } => {
             out.push_str("<img src=\"");
-            push_escaped_attr(out, &sanitize_url(dest.as_ref()));
+            push_escaped_attr(out, &sanitize_url(dest_url.as_ref()));
             out.push_str("\" alt=\"");
             if title.is_empty() {
                 image_titles.push(None);
@@ -162,11 +207,23 @@ fn render_start_tag(
                 image_titles.push(Some(title.to_string()));
             }
         }
+        Tag::HtmlBlock => {
+            out.push_str("<pre data-line=\"");
+            out.push_str(&line.to_string());
+            out.push_str("\" class=\"html-block\">");
+        }
         Tag::FootnoteDefinition(label) => {
             out.push_str("<section data-line=\"");
             out.push_str(&line.to_string());
             out.push_str("\" class=\"footnote\" data-footnote=\"");
             push_escaped_attr(out, label.as_ref());
+            out.push_str("\">");
+        }
+        Tag::MetadataBlock(kind) => {
+            out.push_str("<pre data-line=\"");
+            out.push_str(&line.to_string());
+            out.push_str("\" class=\"metadata-block metadata-");
+            out.push_str(metadata_block_kind_name(kind));
             out.push_str("\">");
         }
         Tag::Table(_alignments) => open_block_tag(out, "table", line),
@@ -185,39 +242,46 @@ fn render_start_tag(
     }
 }
 
-fn render_end_tag(out: &mut String, tag: Tag<'_>, in_table_head: &mut bool) {
+fn render_end_tag(out: &mut String, tag: TagEnd, in_table_head: &mut bool) {
     match tag {
-        Tag::Paragraph => out.push_str("</p>"),
-        Tag::Heading(level, _id, _classes) => {
+        TagEnd::Paragraph => out.push_str("</p>"),
+        TagEnd::Heading(level) => {
             let level = heading_level_number(level);
             out.push_str("</h");
             out.push_str(&level.to_string());
             out.push('>');
         }
-        Tag::BlockQuote => out.push_str("</blockquote>"),
-        Tag::CodeBlock(_) => out.push_str("</code></pre>"),
-        Tag::List(Some(_)) => out.push_str("</ol>"),
-        Tag::List(None) => out.push_str("</ul>"),
-        Tag::Item => out.push_str("</li>"),
-        Tag::Emphasis => out.push_str("</em>"),
-        Tag::Strong => out.push_str("</strong>"),
-        Tag::Strikethrough => out.push_str("</del>"),
-        Tag::Link(..) => out.push_str("</a>"),
-        Tag::Image(..) => {}
-        Tag::FootnoteDefinition(_) => out.push_str("</section>"),
-        Tag::Table(_) => out.push_str("</table>"),
-        Tag::TableHead => {
+        TagEnd::BlockQuote(_) => out.push_str("</blockquote>"),
+        TagEnd::CodeBlock => out.push_str("</code></pre>"),
+        TagEnd::HtmlBlock => out.push_str("</pre>"),
+        TagEnd::List(true) => out.push_str("</ol>"),
+        TagEnd::List(false) => out.push_str("</ul>"),
+        TagEnd::Item => out.push_str("</li>"),
+        TagEnd::FootnoteDefinition => out.push_str("</section>"),
+        TagEnd::DefinitionList => out.push_str("</dl>"),
+        TagEnd::DefinitionListTitle => out.push_str("</dt>"),
+        TagEnd::DefinitionListDefinition => out.push_str("</dd>"),
+        TagEnd::Table => out.push_str("</table>"),
+        TagEnd::TableHead => {
             *in_table_head = false;
             out.push_str("</thead>");
         }
-        Tag::TableRow => out.push_str("</tr>"),
-        Tag::TableCell => {
+        TagEnd::TableRow => out.push_str("</tr>"),
+        TagEnd::TableCell => {
             if *in_table_head {
                 out.push_str("</th>");
             } else {
                 out.push_str("</td>");
             }
         }
+        TagEnd::Emphasis => out.push_str("</em>"),
+        TagEnd::Strong => out.push_str("</strong>"),
+        TagEnd::Strikethrough => out.push_str("</del>"),
+        TagEnd::Superscript => out.push_str("</sup>"),
+        TagEnd::Subscript => out.push_str("</sub>"),
+        TagEnd::Link => out.push_str("</a>"),
+        TagEnd::Image => {}
+        TagEnd::MetadataBlock(_) => out.push_str("</pre>"),
     }
 }
 
@@ -227,7 +291,7 @@ fn render_image_alt_event(
     event: Event<'_>,
 ) {
     match event {
-        Event::End(Tag::Image(..)) => {
+        Event::End(TagEnd::Image) => {
             out.push('"');
             if let Some(Some(title)) = image_titles.pop() {
                 out.push_str(" title=\"");
@@ -236,7 +300,13 @@ fn render_image_alt_event(
             }
             out.push_str(" />");
         }
-        Event::Text(text) | Event::Code(text) | Event::Html(text) => {
+        Event::Text(text)
+        | Event::Code(text)
+        | Event::Html(text)
+        | Event::InlineHtml(text)
+        | Event::InlineMath(text)
+        | Event::DisplayMath(text)
+        | Event::FootnoteReference(text) => {
             push_escaped_attr(out, text.as_ref());
         }
         Event::SoftBreak | Event::HardBreak => out.push(' '),
@@ -282,11 +352,16 @@ fn collect_heading_ids(markdown: &str, options: Options) -> Vec<String> {
 
     for event in Parser::new_ext(markdown, options) {
         match event {
-            Event::Start(Tag::Heading(_level, id, _classes)) => {
+            Event::Start(Tag::Heading {
+                level: _,
+                id,
+                classes: _,
+                attrs: _,
+            }) => {
                 heading_text = Some(String::new());
                 explicit_heading_id = normalize_heading_id(id.as_deref());
             }
-            Event::End(Tag::Heading(..)) => {
+            Event::End(TagEnd::Heading(_)) => {
                 let text = heading_text.take().unwrap_or_default();
                 let base = if let Some(explicit) = explicit_heading_id.take() {
                     explicit
@@ -298,7 +373,12 @@ fn collect_heading_ids(markdown: &str, options: Options) -> Vec<String> {
                 let unique = unique_heading_id(base, &mut used_ids, &mut next_suffixes);
                 ids.push(unique);
             }
-            Event::Text(text) | Event::Code(text) | Event::Html(text) => {
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::Html(text)
+            | Event::InlineHtml(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text) => {
                 if let Some(current) = heading_text.as_mut() {
                     current.push_str(text.as_ref());
                 }
@@ -333,11 +413,16 @@ fn collect_internal_heading_aliases(
 
     for event in Parser::new_ext(markdown, options) {
         match event {
-            Event::Start(Tag::Link(_kind, dest, _title)) => {
-                active_fragment = internal_fragment_id(dest.as_ref());
+            Event::Start(Tag::Link {
+                link_type: _,
+                dest_url,
+                title: _,
+                id: _,
+            }) => {
+                active_fragment = internal_fragment_id(dest_url.as_ref());
                 active_text.clear();
             }
-            Event::End(Tag::Link(..)) => {
+            Event::End(TagEnd::Link) => {
                 if let Some(fragment) = active_fragment.take() {
                     let key = normalize_heading_lookup_text(&active_text);
                     if !key.is_empty() {
@@ -346,7 +431,12 @@ fn collect_internal_heading_aliases(
                 }
                 active_text.clear();
             }
-            Event::Text(text) | Event::Code(text) | Event::Html(text) => {
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::Html(text)
+            | Event::InlineHtml(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text) => {
                 if active_fragment.is_some() {
                     active_text.push_str(text.as_ref());
                 }
@@ -467,6 +557,23 @@ fn unique_heading_id(
             next_suffixes.insert(base.clone(), suffix);
             return candidate;
         }
+    }
+}
+
+fn block_quote_kind_name(kind: BlockQuoteKind) -> &'static str {
+    match kind {
+        BlockQuoteKind::Note => "note",
+        BlockQuoteKind::Tip => "tip",
+        BlockQuoteKind::Important => "important",
+        BlockQuoteKind::Warning => "warning",
+        BlockQuoteKind::Caution => "caution",
+    }
+}
+
+fn metadata_block_kind_name(kind: MetadataBlockKind) -> &'static str {
+    match kind {
+        MetadataBlockKind::YamlStyle => "yaml",
+        MetadataBlockKind::PlusesStyle => "pluses",
     }
 }
 
