@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinHandle;
@@ -216,7 +216,11 @@ async fn active(State(state): State<HttpState>) -> Response {
     Json(ActiveResponse { bufnr }).into_response()
 }
 
-async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) -> Response {
+async fn asset(
+    State(state): State<HttpState>,
+    request_headers: HeaderMap,
+    Query(query): Query<AssetQuery>,
+) -> Response {
     let Some(path) = state
         .sessions
         .resolve_local_asset_path(query.buf, &query.path)
@@ -224,6 +228,31 @@ async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) 
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
+
+    let metadata = match tokio::fs::metadata(&path).await {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let etag = build_asset_etag(&metadata);
+    if let Some(ref value) = etag {
+        if if_none_match_matches(&request_headers, value) {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "cache-control",
+                HeaderValue::from_static("private, max-age=60"),
+            );
+            if let Ok(header_value) = HeaderValue::from_str(value) {
+                headers.insert("etag", header_value);
+            }
+            return (StatusCode::NOT_MODIFIED, headers).into_response();
+        }
+    }
 
     let bytes = match tokio::fs::read(&path).await {
         Ok(bytes) => bytes,
@@ -240,7 +269,15 @@ async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) 
         "content-type",
         HeaderValue::from_static(image_content_type(&path)),
     );
-    headers.insert("cache-control", HeaderValue::from_static("no-store"));
+    headers.insert(
+        "cache-control",
+        HeaderValue::from_static("private, max-age=60"),
+    );
+    if let Some(value) = etag {
+        if let Ok(header_value) = HeaderValue::from_str(&value) {
+            headers.insert("etag", header_value);
+        }
+    }
 
     (headers, bytes).into_response()
 }
@@ -321,6 +358,29 @@ fn image_content_type(path: &Path) -> &'static str {
     }
 }
 
+fn build_asset_etag(metadata: &std::fs::Metadata) -> Option<String> {
+    let modified = metadata.modified().ok()?;
+    let modified_secs = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    Some(format!("W/\"{:x}-{:x}\"", metadata.len(), modified_secs))
+}
+
+fn if_none_match_matches(headers: &HeaderMap, etag: &str) -> bool {
+    let Some(raw_header) = headers.get("if-none-match") else {
+        return false;
+    };
+    let Ok(raw_value) = raw_header.to_str() else {
+        return false;
+    };
+
+    if raw_value.trim() == "*" {
+        return true;
+    }
+
+    raw_value
+        .split(',')
+        .any(|candidate| candidate.trim() == etag)
+}
+
 async fn bind_listener(config: &ServerConfig) -> Result<(TcpListener, SocketAddr), std::io::Error> {
     let start_port = config.port;
     let end_port = config
@@ -346,7 +406,8 @@ async fn bind_listener(config: &ServerConfig) -> Result<(TcpListener, SocketAddr
 
 #[cfg(test)]
 mod tests {
-    use super::ServerConfig;
+    use super::{ServerConfig, if_none_match_matches};
+    use axum::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn config_defaults_match_spec() {
@@ -358,5 +419,27 @@ mod tests {
         assert!(cfg.auto_scroll);
         assert!((cfg.scroll_comfort_top - 0.25).abs() < f64::EPSILON);
         assert!((cfg.scroll_comfort_bottom - 0.65).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn if_none_match_recognizes_exact_tag() {
+        let mut headers = HeaderMap::new();
+        headers.insert("if-none-match", HeaderValue::from_static("W/\"12-34\""));
+
+        assert!(if_none_match_matches(&headers, "W/\"12-34\""));
+        assert!(!if_none_match_matches(&headers, "W/\"ab-cd\""));
+    }
+
+    #[test]
+    fn if_none_match_supports_multiple_and_wildcard_tags() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "if-none-match",
+            HeaderValue::from_static("\"one\", W/\"22-33\", \"three\""),
+        );
+        assert!(if_none_match_matches(&headers, "W/\"22-33\""));
+
+        headers.insert("if-none-match", HeaderValue::from_static("*"));
+        assert!(if_none_match_matches(&headers, "W/\"whatever\""));
     }
 }

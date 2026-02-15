@@ -90,11 +90,13 @@
         background: var(--bg);
         padding: 20px 22px;
         min-height: 72vh;
+        overflow-anchor: none;
       }
 
       #md-root {
         line-height: 1.62;
         font-size: 0.95rem;
+        overflow-anchor: none;
       }
 
       #md-root [data-line] {
@@ -462,6 +464,10 @@
         let followFrame = 0;
         let followLastTs = 0;
         let activePollTimer = null;
+        let pendingRenderPayload = null;
+        let pendingRenderFrame = 0;
+
+        const syntaxSignatureByCode = new WeakMap();
 
         const search = new URLSearchParams(window.location.search);
         const initialBufnr = (search.get("buf") || "").trim();
@@ -667,6 +673,15 @@
           return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }
 
+        function hashText(value) {
+          let hash = 2166136261;
+          for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+          }
+          return (hash >>> 0).toString(36);
+        }
+
         function normalizeLanguage(raw) {
           if (!raw) {
             return "plain";
@@ -833,8 +848,13 @@
             }
 
             const language = languageFromCodeElement(codeElement);
-            const highlighted = highlightSource(raw, language);
-            codeElement.innerHTML = highlighted;
+            const signature = hashText(`${language}\u0000${raw}`);
+            const previousSignature = syntaxSignatureByCode.get(codeElement);
+            if (previousSignature !== signature) {
+              const highlighted = highlightSource(raw, language);
+              codeElement.innerHTML = highlighted;
+              syntaxSignatureByCode.set(codeElement, signature);
+            }
 
             const pre = codeElement.parentElement;
             if (pre && pre.tagName === "PRE") {
@@ -852,7 +872,12 @@
             if (raw.length > 260) {
               continue;
             }
-            inlineCode.innerHTML = highlightSource(raw, "plain");
+            const signature = hashText(`plain\u0000${raw}`);
+            const previousSignature = syntaxSignatureByCode.get(inlineCode);
+            if (previousSignature !== signature) {
+              inlineCode.innerHTML = highlightSource(raw, "plain");
+              syntaxSignatureByCode.set(inlineCode, signature);
+            }
           }
         }
 
@@ -977,16 +1002,227 @@
           return getMaxScrollTop() * ratio;
         }
 
+        function isClientOwnedAttribute(name) {
+          return name === "data-lang";
+        }
+
+        function syncElementAttributes(currentElement, nextElement) {
+          const currentAttributes = Array.from(currentElement.attributes);
+          for (const attr of currentAttributes) {
+            if (isClientOwnedAttribute(attr.name)) {
+              continue;
+            }
+            if (!nextElement.hasAttribute(attr.name)) {
+              currentElement.removeAttribute(attr.name);
+            }
+          }
+
+          for (const attr of nextElement.attributes) {
+            if (currentElement.getAttribute(attr.name) !== attr.value) {
+              currentElement.setAttribute(attr.name, attr.value);
+            }
+          }
+        }
+
+        function nodeLineKey(node) {
+          if (node.nodeType !== Node.ELEMENT_NODE) {
+            return null;
+          }
+
+          return node.getAttribute("data-line");
+        }
+
+        function areCompatibleNodes(currentNode, nextNode) {
+          if (currentNode.nodeType !== nextNode.nodeType) {
+            return false;
+          }
+
+          if (currentNode.nodeType !== Node.ELEMENT_NODE) {
+            return true;
+          }
+
+          if (currentNode.tagName !== nextNode.tagName) {
+            return false;
+          }
+
+          const currentId = currentNode.getAttribute("id");
+          const nextId = nextNode.getAttribute("id");
+          if (currentId || nextId) {
+            return currentId === nextId;
+          }
+
+          const currentLine = nodeLineKey(currentNode);
+          const nextLine = nodeLineKey(nextNode);
+          if (currentLine || nextLine) {
+            return currentLine === nextLine;
+          }
+
+          return true;
+        }
+
+        function morphNode(currentNode, nextNode) {
+          if (!areCompatibleNodes(currentNode, nextNode)) {
+            const replacement = nextNode.cloneNode(true);
+            currentNode.replaceWith(replacement);
+            return replacement;
+          }
+
+          if (
+            currentNode.nodeType === Node.TEXT_NODE ||
+            currentNode.nodeType === Node.CDATA_SECTION_NODE ||
+            currentNode.nodeType === Node.COMMENT_NODE
+          ) {
+            if (currentNode.textContent !== nextNode.textContent) {
+              currentNode.textContent = nextNode.textContent;
+            }
+            return currentNode;
+          }
+
+          return morphElement(currentNode, nextNode);
+        }
+
+        function morphChildren(currentElement, nextElement) {
+          let currentChild = currentElement.firstChild;
+          let nextChild = nextElement.firstChild;
+
+          while (nextChild) {
+            if (!currentChild) {
+              currentElement.appendChild(nextChild.cloneNode(true));
+              nextChild = nextChild.nextSibling;
+              continue;
+            }
+
+            if (areCompatibleNodes(currentChild, nextChild)) {
+              const currentNextSibling = currentChild.nextSibling;
+              morphNode(currentChild, nextChild);
+              currentChild = currentNextSibling;
+              nextChild = nextChild.nextSibling;
+              continue;
+            }
+
+            const nextSiblingCandidate = nextChild.nextSibling;
+            if (nextSiblingCandidate && areCompatibleNodes(currentChild, nextSiblingCandidate)) {
+              currentElement.insertBefore(nextChild.cloneNode(true), currentChild);
+              nextChild = nextSiblingCandidate;
+              continue;
+            }
+
+            const currentSiblingCandidate = currentChild.nextSibling;
+            if (
+              currentSiblingCandidate &&
+              areCompatibleNodes(currentSiblingCandidate, nextChild)
+            ) {
+              currentElement.removeChild(currentChild);
+              currentChild = currentSiblingCandidate;
+              continue;
+            }
+
+            const replacement = nextChild.cloneNode(true);
+            const currentNextSibling = currentChild.nextSibling;
+            currentElement.replaceChild(replacement, currentChild);
+            currentChild = currentNextSibling;
+            nextChild = nextChild.nextSibling;
+          }
+
+          while (currentChild) {
+            const currentNextSibling = currentChild.nextSibling;
+            currentElement.removeChild(currentChild);
+            currentChild = currentNextSibling;
+          }
+        }
+
+        function morphElement(currentElement, nextElement) {
+          if (currentElement.tagName !== nextElement.tagName) {
+            const replacement = nextElement.cloneNode(true);
+            currentElement.replaceWith(replacement);
+            return replacement;
+          }
+
+          syncElementAttributes(currentElement, nextElement);
+
+          if (currentElement.tagName === "CODE") {
+            const currentText = currentElement.textContent || "";
+            const nextText = nextElement.textContent || "";
+            if (currentText !== nextText) {
+              currentElement.textContent = nextText;
+              syntaxSignatureByCode.delete(currentElement);
+            }
+            return currentElement;
+          }
+
+          morphChildren(currentElement, nextElement);
+          return currentElement;
+        }
+
+        function parseIncomingArticle(html) {
+          const template = document.createElement("template");
+          template.innerHTML = html;
+
+          const parsedArticle = template.content.querySelector("#md-root");
+          if (parsedArticle) {
+            return parsedArticle;
+          }
+
+          const fallbackArticle = document.createElement("article");
+          fallbackArticle.setAttribute("id", "md-root");
+          while (template.content.firstChild) {
+            fallbackArticle.appendChild(template.content.firstChild);
+          }
+          return fallbackArticle;
+        }
+
         function installHtml(html) {
-          previewRoot.innerHTML = html;
-          currentArticle = previewRoot.querySelector("#md-root") || previewRoot;
-          rewriteLocalImageSources(currentArticle);
+          const incomingArticle = parseIncomingArticle(html);
+          rewriteLocalImageSources(incomingArticle);
+
+          const mountedArticle = previewRoot.querySelector("#md-root");
+          if (mountedArticle) {
+            currentArticle = morphElement(mountedArticle, incomingArticle);
+          } else {
+            const nextArticle = incomingArticle.cloneNode(true);
+            previewRoot.replaceChildren(nextArticle);
+            currentArticle = nextArticle;
+          }
+
           applySyntaxHighlighting(currentArticle);
           updateAnchors();
 
           if (latestCursorLine != null) {
             setActiveLine(latestCursorLine);
           }
+        }
+
+        function clearPendingRender() {
+          if (pendingRenderFrame !== 0) {
+            window.cancelAnimationFrame(pendingRenderFrame);
+            pendingRenderFrame = 0;
+          }
+          pendingRenderPayload = null;
+        }
+
+        function applyRenderPayload(payload) {
+          clearWarning();
+          installHtml(payload.html || "<article id=\"md-root\"></article>");
+          followCursorLine(payload.cursor_line, false, true);
+          setStatus("Live");
+        }
+
+        function queueRenderPayload(payload) {
+          pendingRenderPayload = payload;
+          if (pendingRenderFrame !== 0) {
+            return;
+          }
+
+          pendingRenderFrame = window.requestAnimationFrame(() => {
+            pendingRenderFrame = 0;
+            const latestPayload = pendingRenderPayload;
+            pendingRenderPayload = null;
+            if (!latestPayload) {
+              return;
+            }
+
+            applyRenderPayload(latestPayload);
+          });
         }
 
         function findClosestAnchor(line) {
@@ -1073,6 +1309,7 @@
           currentBufnr = String(payload.bufnr || resolvedBufnr);
           filename = payload.filename || "buffer";
           setFilename(filename);
+          clearPendingRender();
           installHtml(payload.html || "<article id=\"md-root\"></article>");
           followCursorLine(payload.cursor_line, true, true);
           setStatus("Connected");
@@ -1095,10 +1332,7 @@
               return;
             }
 
-            clearWarning();
-            installHtml(payload.html || "<article id=\"md-root\"></article>");
-            followCursorLine(payload.cursor_line, false, true);
-            setStatus("Live");
+            queueRenderPayload(payload);
           });
 
           source.addEventListener("cursor_move", (event) => {
@@ -1112,6 +1346,7 @@
           source.addEventListener("session_end", (event) => {
             const payload = readPayload(event);
             const reason = payload && payload.reason ? payload.reason : "stopped";
+            clearPendingRender();
             showWarning(`Session ended: ${reason}`);
             setStatus("Session ended");
             if (source) {
@@ -1125,6 +1360,7 @@
           });
 
           source.onerror = () => {
+            clearPendingRender();
             if (source) {
               source.close();
               source = null;

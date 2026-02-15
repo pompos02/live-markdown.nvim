@@ -1,5 +1,5 @@
 /target
 #lua/*.so
 lua/*.dll
-*c.md
+#*c.md
 src/target/rust-analyzer/
