@@ -457,9 +457,12 @@
         let followVelocity = 0;
         let followFrame = 0;
         let followLastTs = 0;
+        let activePollTimer = null;
 
         const search = new URLSearchParams(window.location.search);
-        const bufnr = search.get("buf");
+        const initialBufnr = search.get("buf");
+        const followMode = ["1", "true", "yes", "on"].includes((search.get("follow") || "").toLowerCase());
+        let currentBufnr = initialBufnr;
 
         const LANGUAGE_ALIASES = Object.freeze({
           rs: "rust",
@@ -517,7 +520,7 @@
         const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
         const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
 
-        if (!bufnr) {
+        if (!currentBufnr) {
           setStatus("Missing buffer id");
           showWarning("Preview URL is missing required query parameters.");
           return;
@@ -617,7 +620,7 @@
             }
 
             const params = new URLSearchParams({
-              buf: bufnr,
+              buf: currentBufnr,
               path: normalizedPath,
             });
             image.setAttribute("src", `/asset?${params.toString()}`);
@@ -1028,13 +1031,14 @@
 
         let filename = "buffer";
 
-        async function loadSnapshot() {
-          const response = await fetch(`/snapshot?buf=${encodeURIComponent(bufnr)}`);
+        async function loadSnapshot(targetBufnr = currentBufnr) {
+          const response = await fetch(`/snapshot?buf=${encodeURIComponent(targetBufnr)}`);
           if (!response.ok) {
             throw new Error(`snapshot_http_${response.status}`);
           }
 
           const payload = await response.json();
+          currentBufnr = String(payload.bufnr || targetBufnr);
           filename = payload.filename || "buffer";
           setFilename(filename);
           installHtml(payload.html || "<article id=\"md-root\"></article>");
@@ -1047,7 +1051,7 @@
             source.close();
           }
 
-          source = new EventSource(`/events?buf=${encodeURIComponent(bufnr)}`);
+          source = new EventSource(`/events?buf=${encodeURIComponent(currentBufnr)}`);
 
           source.addEventListener("render_full", (event) => {
             const payload = readPayload(event);
@@ -1097,10 +1101,69 @@
                 connectEvents();
               } catch (_error) {
                 setStatus("Reconnect failed - retrying...");
-                connectEvents();
+                if (!followMode) {
+                  connectEvents();
+                }
               }
             }, 800);
           };
+        }
+
+        async function switchToBuffer(nextBufnr) {
+          if (!nextBufnr || String(nextBufnr) === String(currentBufnr)) {
+            return;
+          }
+
+          currentBufnr = String(nextBufnr);
+          clearWarning();
+          setStatus("Switching...");
+
+          await loadSnapshot(currentBufnr);
+          connectEvents();
+        }
+
+        async function pollActiveBuffer() {
+          if (!followMode) {
+            return;
+          }
+
+          let response;
+          try {
+            response = await fetch("/active", { cache: "no-store" });
+          } catch (_error) {
+            return;
+          }
+
+          if (!response.ok) {
+            return;
+          }
+
+          let payload;
+          try {
+            payload = await response.json();
+          } catch (_error) {
+            return;
+          }
+
+          if (!payload || payload.bufnr == null) {
+            return;
+          }
+
+          try {
+            await switchToBuffer(payload.bufnr);
+          } catch (_error) {
+            // Keep current preview when follow switch fails.
+          }
+        }
+
+        function startActivePolling() {
+          if (!followMode || activePollTimer !== null) {
+            return;
+          }
+
+          activePollTimer = window.setInterval(() => {
+            void pollActiveBuffer();
+          }, 700);
         }
 
         function markManualScroll() {
@@ -1121,6 +1184,8 @@
           try {
             await loadSnapshot();
             connectEvents();
+            startActivePolling();
+            void pollActiveBuffer();
           } catch (_error) {
             setStatus("Unable to load snapshot");
             showWarning("Failed to fetch initial preview snapshot. Check buffer id and active session.");

@@ -18,6 +18,7 @@ static CALLBACKS_REGISTERED: AtomicBool = AtomicBool::new(false);
 struct AppState {
     plugin: LiveMarkdownPlugin,
     runtime: Runtime,
+    follow_mode: AtomicBool,
 }
 
 impl AppState {
@@ -31,6 +32,7 @@ impl AppState {
         Ok(Self {
             plugin: LiveMarkdownPlugin::new(config),
             runtime,
+            follow_mode: AtomicBool::new(false),
         })
     }
 
@@ -58,6 +60,24 @@ impl AppState {
         self.runtime
             .block_on(self.plugin.start_preview(snapshot))
             .map_err(|err| err.to_string())
+    }
+
+    fn follow_current(&self) -> std::result::Result<String, String> {
+        let buffer = api::get_current_buf();
+        if !is_markdown_buffer(&buffer) {
+            return Err(String::from(
+                "current buffer is not markdown (filetype or extension mismatch)",
+            ));
+        }
+
+        let snapshot = snapshot_from_buffer(&buffer)?;
+        let url = self
+            .runtime
+            .block_on(self.plugin.start_preview(snapshot))
+            .map_err(|err| err.to_string())?;
+
+        self.follow_mode.store(true, Ordering::Release);
+        Ok(format!("{url}&follow=1"))
     }
 
     fn toggle_current(&self) -> std::result::Result<Option<String>, String> {
@@ -136,14 +156,28 @@ impl AppState {
         });
     }
 
-    fn on_buf_enter(&self, bufnr: i64) {
-        if !self.has_session(bufnr) {
+    fn on_buf_enter(&self, buffer: api::Buffer) {
+        let bufnr = i64::from(buffer.handle());
+
+        if self.has_session(bufnr) {
+            let plugin = self.plugin.clone();
+            self.runtime.spawn(async move {
+                plugin.on_buf_enter(bufnr).await;
+            });
+        }
+
+        if !self.follow_mode.load(Ordering::Acquire) || !is_markdown_buffer(&buffer) {
             return;
         }
 
+        let snapshot = match snapshot_from_buffer(&buffer) {
+            Ok(snapshot) => snapshot,
+            Err(_) => return,
+        };
+
         let plugin = self.plugin.clone();
         self.runtime.spawn(async move {
-            plugin.on_buf_enter(bufnr).await;
+            let _ = plugin.start_preview(snapshot).await;
         });
     }
 
@@ -177,6 +211,7 @@ pub fn module() -> Result<Dictionary> {
         ("stop", Object::from(Function::from_fn(stop))),
         ("toggle", Object::from(Function::from_fn(toggle))),
         ("open", Object::from(Function::from_fn(open))),
+        ("follow", Object::from(Function::from_fn(follow))),
         ("shutdown", Object::from(Function::from_fn(shutdown))),
     ]))
 }
@@ -238,6 +273,19 @@ fn stop(all: Option<bool>) {
     }
 }
 
+fn follow(_: ()) {
+    let Some(state) = state() else {
+        notify_err("[live-markdown.nvim] plugin is not configured");
+        return;
+    };
+
+    match state.follow_current() {
+        Ok(url) => notify_info(&format!(
+            "[live-markdown.nvim] follow preview started: {url}"
+        )),
+        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
+    }
+}
 fn toggle(_: ()) {
     let Some(state) = state() else {
         notify_err("[live-markdown.nvim] plugin is not configured");
@@ -312,6 +360,13 @@ fn register_commands() -> Result<()> {
         .build();
     api::create_user_command("LiveMarkdownOpen", command_open, &open_opts)?;
 
+    let follow_opts = CreateCommandOpts::builder()
+        .desc("Start markdown preview and follow buffer")
+        .force(true)
+        .nargs(CommandNArgs::Zero)
+        .build();
+    api::create_user_command("LiveMarkdownFollow", command_follow, &follow_opts)?;
+
     Ok(())
 }
 
@@ -380,6 +435,10 @@ fn command_open(_: CommandArgs) {
     open(());
 }
 
+fn command_follow(_: CommandArgs) {
+    follow(());
+}
+
 fn autocmd_text_changed(args: AutocmdCallbackArgs) -> bool {
     if !is_markdown_buffer(&args.buffer) {
         return false;
@@ -418,7 +477,7 @@ fn autocmd_buf_write_post(args: AutocmdCallbackArgs) -> bool {
 
 fn autocmd_buf_enter(args: AutocmdCallbackArgs) -> bool {
     if let Some(state) = state() {
-        state.on_buf_enter(i64::from(args.buffer.handle()));
+        state.on_buf_enter(args.buffer);
     }
 
     false

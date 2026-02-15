@@ -31,8 +31,16 @@ function M.open()
     return core().open()
 end
 
+function M.follow()
+    return core().follow()
+end
+
 function M.shutdown()
     return core().shutdown()
+end
+
+function M.start()
+    return core().follow()
 end
 
 return M

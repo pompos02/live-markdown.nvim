@@ -153,6 +153,11 @@ struct AssetQuery {
     path: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct ActiveResponse {
+    bufnr: Option<i64>,
+}
+
 impl HttpState {
     fn next_client_id(&self) -> u64 {
         self.client_id_counter.fetch_add(1, Ordering::Relaxed)
@@ -163,6 +168,7 @@ fn build_router(state: HttpState) -> Router {
     Router::new()
         .route("/", get(preview_shell))
         .route("/snapshot", get(snapshot))
+        .route("/active", get(active))
         .route("/asset", get(asset))
         .route("/events", get(events))
         .with_state(state)
@@ -203,6 +209,11 @@ async fn snapshot(State(state): State<HttpState>, Query(query): Query<SessionQue
         Some(snapshot) => Json(snapshot).into_response(),
         None => json_error(StatusCode::NOT_FOUND, "preview session not found"),
     }
+}
+
+async fn active(State(state): State<HttpState>) -> Response {
+    let bufnr = state.sessions.active_bufnr().await;
+    Json(ActiveResponse { bufnr }).into_response()
 }
 
 async fn asset(State(state): State<HttpState>, Query(query): Query<AssetQuery>) -> Response {
