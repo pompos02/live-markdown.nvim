@@ -20,7 +20,7 @@ Real-time Markdown preview for Neovim, powered by Rust.
 
 ## Install
 
-The repo comes bundled with the Binary, if you want to build it yourself run the build helper so the native module is copied to `lua/live_markdown_native.so`.
+The repo comes bundled with the linux Binary, if you want to build it yourself run the build helper so the native module is copied to `lua/live_markdown_native.so`.
 
 ### lazy.nvim example
 

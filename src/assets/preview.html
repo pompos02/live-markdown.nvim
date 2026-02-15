@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Markdown Render Preview</title>
+    <title>__FILENAME__ - Markdown Preview</title>
     <style>
       :root {
         --bg: #0a0a0a;
@@ -541,6 +541,7 @@
         function setFilename(value) {
           const label = filenameFromPath(value);
           filenameLine.textContent = label;
+          document.title = label + " - Markdown Preview";
         }
 
         function showWarning(message) {
