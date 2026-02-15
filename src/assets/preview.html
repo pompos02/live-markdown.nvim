@@ -468,10 +468,7 @@
             let pendingRenderFrame = 0;
 
             const syntaxSignatureByCode = new WeakMap();
-
-            const search = new URLSearchParams(window.location.search);
-            const initialBufnr = (search.get("buf") || "").trim();
-            let currentBufnr = initialBufnr || null;
+            let currentBufnr = null;
 
             const LANGUAGE_ALIASES = Object.freeze({
                 rs: "rust",
@@ -1292,39 +1289,38 @@
                 }
             }
 
-            let filename = "buffer";
+            let syncInFlight = false;
 
-            async function loadSnapshot(targetBufnr = currentBufnr) {
-                const resolvedBufnr = targetBufnr == null ? await getActiveBufnr() : String(targetBufnr);
-                if (!resolvedBufnr) {
-                    throw new Error("snapshot_no_active_session");
+            function closeEventStream() {
+                if (source) {
+                    source.close();
+                    source = null;
                 }
+            }
 
-                const response = await fetch(`/snapshot?buf=${encodeURIComponent(resolvedBufnr)}`);
+            function setWaitingForActivePreview() {
+                setStatus("Waiting for active preview...");
+                showWarning("No active preview session. Start with :LiveMarkdownStart.");
+            }
+
+            async function loadSnapshotForBuffer(bufnr) {
+                const response = await fetch(`/snapshot?buf=${encodeURIComponent(bufnr)}`);
                 if (!response.ok) {
                     throw new Error(`snapshot_http_${response.status}`);
                 }
 
                 const payload = await response.json();
-                currentBufnr = String(payload.bufnr || resolvedBufnr);
-                filename = payload.filename || "buffer";
-                setFilename(filename);
+                currentBufnr = String(payload.bufnr || bufnr);
+                setFilename(payload.filename || "buffer");
                 clearPendingRender();
                 installHtml(payload.html || "<article id=\"md-root\"></article>");
                 followCursorLine(payload.cursor_line, true, true);
                 setStatus("Connected");
             }
 
-            function connectEvents() {
-                if (!currentBufnr) {
-                    return;
-                }
-
-                if (source) {
-                    source.close();
-                }
-
-                source = new EventSource(`/events?buf=${encodeURIComponent(currentBufnr)}`);
+            function connectEventsForBuffer(bufnr) {
+                closeEventStream();
+                source = new EventSource(`/events?buf=${encodeURIComponent(bufnr)}`);
 
                 source.addEventListener("render_full", (event) => {
                     const payload = readPayload(event);
@@ -1347,12 +1343,10 @@
                     const payload = readPayload(event);
                     const reason = payload && payload.reason ? payload.reason : "stopped";
                     clearPendingRender();
+                    closeEventStream();
+                    currentBufnr = null;
                     showWarning(`Session ended: ${reason}`);
                     setStatus("Session ended");
-                    if (source) {
-                        source.close();
-                        source = null;
-                    }
                 });
 
                 source.addEventListener("heartbeat", () => {
@@ -1361,66 +1355,53 @@
 
                 source.onerror = () => {
                     clearPendingRender();
-                    if (source) {
-                        source.close();
-                        source = null;
-                    }
-
+                    closeEventStream();
                     setStatus("Disconnected - reconnecting...");
-                    setTimeout(async () => {
-                        try {
-                            await pollActiveBuffer();
-                            if (source) {
-                                return;
-                            }
-
-                            await loadSnapshot();
-                            connectEvents();
-                        } catch (_error) {
-                            setStatus("Waiting for active preview...");
-                            showWarning("No active preview session. Start with :LiveMarkdownStart.");
-                        }
+                    window.setTimeout(() => {
+                        void syncWithActiveBuffer();
                     }, 800);
                 };
             }
 
-            async function switchToBuffer(nextBufnr) {
-                if (!nextBufnr || String(nextBufnr) === String(currentBufnr)) {
+            async function syncWithActiveBuffer() {
+                if (syncInFlight) {
                     return;
                 }
 
-                currentBufnr = String(nextBufnr);
-                clearWarning();
-                setStatus("Switching...");
+                syncInFlight = true;
 
-                await loadSnapshot(currentBufnr);
-                connectEvents();
-            }
-
-            async function pollActiveBuffer() {
-                const activeBufnr = await getActiveBufnr();
-                if (!activeBufnr) {
-                    return;
-                }
-
-                if (String(activeBufnr) === String(currentBufnr)) {
-                    if (source) {
+                try {
+                    const activeBufnr = await getActiveBufnr();
+                    if (!activeBufnr) {
+                        clearPendingRender();
+                        closeEventStream();
+                        currentBufnr = null;
+                        setWaitingForActivePreview();
                         return;
                     }
 
-                    try {
-                        await loadSnapshot(activeBufnr);
-                        connectEvents();
-                    } catch (_error) {
-                        // Keep waiting for the next polling tick.
-                    }
-                    return;
-                }
+                    clearWarning();
 
-                try {
-                    await switchToBuffer(activeBufnr);
+                    if (activeBufnr !== currentBufnr) {
+                        closeEventStream();
+                        currentBufnr = activeBufnr;
+                        setStatus("Switching...");
+                        await loadSnapshotForBuffer(activeBufnr);
+                        connectEventsForBuffer(activeBufnr);
+                        return;
+                    }
+
+                    if (!source) {
+                        setStatus("Connecting...");
+                        await loadSnapshotForBuffer(activeBufnr);
+                        connectEventsForBuffer(activeBufnr);
+                    }
                 } catch (_error) {
-                    // Keep current preview when follow switch fails.
+                    if (!source) {
+                        setWaitingForActivePreview();
+                    }
+                } finally {
+                    syncInFlight = false;
                 }
             }
 
@@ -1430,7 +1411,7 @@
                 }
 
                 activePollTimer = window.setInterval(() => {
-                    void pollActiveBuffer();
+                    void syncWithActiveBuffer();
                 }, 700);
             }
 
@@ -1449,18 +1430,7 @@
             });
 
             startActivePolling();
-
-            (async () => {
-                try {
-                    await loadSnapshot();
-                    connectEvents();
-                    void pollActiveBuffer();
-                } catch (_error) {
-                    setStatus("Waiting for active preview...");
-                    showWarning("No active preview session. Start with :LiveMarkdownStart.");
-                    void pollActiveBuffer();
-                }
-            })();
+            void syncWithActiveBuffer();
         })();
         </script>
     </body>

@@ -38,10 +38,6 @@ impl AppState {
         self.runtime.block_on(self.plugin.shutdown());
     }
 
-    fn stop_all(&self) {
-        self.runtime.block_on(self.plugin.stop_all_previews());
-    }
-
     fn has_session(&self, bufnr: i64) -> bool {
         self.runtime.block_on(self.plugin.has_session(bufnr))
     }
@@ -69,10 +65,16 @@ impl AppState {
         Ok(url)
     }
 
-    fn stop_current(&self) -> std::result::Result<bool, String> {
-        let bufnr = i64::from(api::get_current_buf().handle());
+    fn stop_active(&self) -> std::result::Result<bool, String> {
         self.runtime
-            .block_on(self.plugin.stop_preview(bufnr))
+            .block_on(async {
+                let sessions = self.plugin.sessions();
+                let Some(bufnr) = sessions.active_bufnr().await else {
+                    return Ok(false);
+                };
+
+                self.plugin.stop_preview(bufnr).await
+            })
             .map_err(|err| err.to_string())
     }
 
@@ -132,17 +134,12 @@ impl AppState {
     }
 
     fn on_buf_enter(&self, buffer: api::Buffer) {
-        let bufnr = i64::from(buffer.handle());
-
-        if self.has_session(bufnr) {
-            let plugin = self.plugin.clone();
-            self.runtime.spawn(async move {
-                plugin.on_buf_enter(bufnr).await;
-            });
+        if !is_markdown_buffer(&buffer) || !self.has_active_previews() {
             return;
         }
 
-        if !is_markdown_buffer(&buffer) || !self.has_active_previews() {
+        let bufnr = i64::from(buffer.handle());
+        if self.has_session(bufnr) {
             return;
         }
 
@@ -153,18 +150,7 @@ impl AppState {
 
         let plugin = self.plugin.clone();
         self.runtime.spawn(async move {
-            let _ = plugin.start_preview(snapshot).await;
-        });
-    }
-
-    fn on_buf_leave(&self, bufnr: i64) {
-        if !self.has_session(bufnr) {
-            return;
-        }
-
-        let plugin = self.plugin.clone();
-        self.runtime.spawn(async move {
-            plugin.on_buf_leave(bufnr).await;
+            plugin.on_buf_enter(snapshot).await;
         });
     }
 
@@ -216,21 +202,15 @@ fn setup_impl(opts: Option<Dictionary>) -> Result<()> {
     Ok(())
 }
 
-fn stop(all: Option<bool>) {
+fn stop(_: Option<bool>) {
     let Some(state) = state() else {
         notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
-    if all.unwrap_or(false) {
-        state.stop_all();
-        notify_info("[live-markdown.nvim] stopped all preview sessions");
-        return;
-    }
-
-    match state.stop_current() {
-        Ok(true) => notify_info("[live-markdown.nvim] stopped current preview session"),
-        Ok(false) => notify_info("[live-markdown.nvim] no active preview for current buffer"),
+    match state.stop_active() {
+        Ok(true) => notify_info("[live-markdown.nvim] stopped preview server"),
+        Ok(false) => notify_info("[live-markdown.nvim] no active preview session"),
         Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
@@ -280,8 +260,7 @@ fn ensure_callbacks_registered() -> Result<()> {
 
 fn register_commands() -> Result<()> {
     let stop_opts = CreateCommandOpts::builder()
-        .bang(true)
-        .desc("Stop markdown preview for current buffer or all with !")
+        .desc("Stop markdown preview server")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
@@ -332,12 +311,6 @@ fn register_autocmds() -> Result<()> {
         .build();
     api::create_autocmd(["BufEnter"], &enter_opts)?;
 
-    let leave_opts = CreateAutocmdOpts::builder()
-        .group(group_id)
-        .callback(autocmd_buf_leave)
-        .build();
-    api::create_autocmd(["BufLeave"], &leave_opts)?;
-
     let wipeout_opts = CreateAutocmdOpts::builder()
         .group(group_id)
         .callback(autocmd_buf_wipeout)
@@ -353,8 +326,8 @@ fn register_autocmds() -> Result<()> {
     Ok(())
 }
 
-fn command_stop(args: CommandArgs) {
-    stop(Some(args.bang));
+fn command_stop(_: CommandArgs) {
+    stop(None);
 }
 
 fn command_show_url(_: CommandArgs) {
@@ -404,14 +377,6 @@ fn autocmd_buf_write_post(args: AutocmdCallbackArgs) -> bool {
 fn autocmd_buf_enter(args: AutocmdCallbackArgs) -> bool {
     if let Some(state) = state() {
         state.on_buf_enter(args.buffer);
-    }
-
-    false
-}
-
-fn autocmd_buf_leave(args: AutocmdCallbackArgs) -> bool {
-    if let Some(state) = state() {
-        state.on_buf_leave(i64::from(args.buffer.handle()));
     }
 
     false

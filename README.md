@@ -44,8 +44,7 @@ The repo comes bundled with the linux Binary, if you want to build it yourself r
 
 ## Commands
 
-- `:LiveMarkdownStop` - stop preview for current buffer
-- `:LiveMarkdownStop!` - stop all active preview sessions
+- `:LiveMarkdownStop` - stop the preview server
 - `:LiveMarkdownShowUrl` - print current preview URL
 - `:LiveMarkdownStart` - start preview and keep the browser synced to markdown buffer switches (default behavior)
 

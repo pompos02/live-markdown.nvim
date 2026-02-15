@@ -124,12 +124,12 @@ impl LiveMarkdownPlugin {
         }
     }
 
-    pub async fn on_buf_enter(&self, bufnr: i64) {
-        self.sessions.resume_session(bufnr).await;
-    }
+    pub async fn on_buf_enter(&self, snapshot: BufferSnapshot) {
+        if self.sessions.session_count().await == 0 {
+            return;
+        }
 
-    pub async fn on_buf_leave(&self, bufnr: i64) {
-        self.sessions.pause_session(bufnr).await;
+        self.sessions.start_session(snapshot, &self.renderer).await;
     }
 
     pub async fn on_buf_wipeout(&self, bufnr: i64) -> Result<(), PluginError> {

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -12,9 +11,8 @@ pub struct AutocmdGate {
 
 #[derive(Debug, Default)]
 struct GateState {
-    last_content_emit: HashMap<i64, Instant>,
-    last_cursor_emit: HashMap<i64, Instant>,
-    last_cursor_line: HashMap<i64, usize>,
+    last_content_emit: Option<(i64, Instant)>,
+    last_cursor_emit: Option<(i64, Instant, usize)>,
 }
 
 impl AutocmdGate {
@@ -29,10 +27,14 @@ impl AutocmdGate {
     pub async fn allow_content_emit(&self, bufnr: i64) -> bool {
         let now = Instant::now();
         let mut state = self.state.lock().await;
-        match state.last_content_emit.get(&bufnr) {
-            Some(last) if now.duration_since(*last) < self.content_window => false,
+        match state.last_content_emit {
+            Some((last_bufnr, last_emit))
+                if last_bufnr == bufnr && now.duration_since(last_emit) < self.content_window =>
+            {
+                false
+            }
             _ => {
-                state.last_content_emit.insert(bufnr, now);
+                state.last_content_emit = Some((bufnr, now));
                 true
             }
         }
@@ -43,32 +45,42 @@ impl AutocmdGate {
         let mut state = self.state.lock().await;
 
         if state
-            .last_cursor_line
-            .get(&bufnr)
-            .is_some_and(|last| *last == line)
+            .last_cursor_emit
+            .is_some_and(|(last_bufnr, _, last_line)| last_bufnr == bufnr && last_line == line)
         {
             return false;
         }
 
-        let allow_time = match state.last_cursor_emit.get(&bufnr) {
-            Some(last) => now.duration_since(*last) >= self.cursor_window,
-            None => true,
+        let allow_time = match state.last_cursor_emit {
+            Some((last_bufnr, last_emit, _)) if last_bufnr == bufnr => {
+                now.duration_since(last_emit) >= self.cursor_window
+            }
+            _ => true,
         };
 
         if !allow_time {
             return false;
         }
 
-        state.last_cursor_emit.insert(bufnr, now);
-        state.last_cursor_line.insert(bufnr, line);
+        state.last_cursor_emit = Some((bufnr, now, line));
         true
     }
 
     pub async fn clear_buffer(&self, bufnr: i64) {
         let mut state = self.state.lock().await;
-        state.last_content_emit.remove(&bufnr);
-        state.last_cursor_emit.remove(&bufnr);
-        state.last_cursor_line.remove(&bufnr);
+        if state
+            .last_content_emit
+            .is_some_and(|(last_bufnr, _)| last_bufnr == bufnr)
+        {
+            state.last_content_emit = None;
+        }
+
+        if state
+            .last_cursor_emit
+            .is_some_and(|(last_bufnr, _, _)| last_bufnr == bufnr)
+        {
+            state.last_cursor_emit = None;
+        }
     }
 }
 

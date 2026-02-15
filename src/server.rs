@@ -11,7 +11,6 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, oneshot};
@@ -67,7 +66,6 @@ pub struct ServerController {
     config: ServerConfig,
     sessions: SessionManager,
     runtime: Arc<Mutex<RuntimeState>>,
-    client_id_counter: Arc<AtomicU64>,
 }
 
 impl ServerController {
@@ -76,7 +74,6 @@ impl ServerController {
             config,
             sessions,
             runtime: Arc::new(Mutex::new(RuntimeState::empty())),
-            client_id_counter: Arc::new(AtomicU64::new(1)),
         }
     }
 
@@ -92,7 +89,6 @@ impl ServerController {
         let state = HttpState {
             sessions: self.sessions.clone(),
             config: self.config.clone(),
-            client_id_counter: self.client_id_counter.clone(),
         };
         let app = build_router(state);
 
@@ -144,7 +140,6 @@ impl ServerController {
 struct HttpState {
     sessions: SessionManager,
     config: ServerConfig,
-    client_id_counter: Arc<AtomicU64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -156,12 +151,6 @@ struct AssetQuery {
 #[derive(Debug, Clone, Serialize)]
 struct ActiveResponse {
     bufnr: Option<i64>,
-}
-
-impl HttpState {
-    fn next_client_id(&self) -> u64 {
-        self.client_id_counter.fetch_add(1, Ordering::Relaxed)
-    }
 }
 
 fn build_router(state: HttpState) -> Router {
@@ -283,12 +272,10 @@ async fn asset(
 }
 
 async fn events(State(state): State<HttpState>, Query(query): Query<SessionQuery>) -> Response {
-    let client_id = state.next_client_id();
-    let Some(mut rx) = state.sessions.subscribe(query.buf, client_id).await else {
+    let Some(mut rx) = state.sessions.subscribe(query.buf).await else {
         return json_error(StatusCode::NOT_FOUND, "preview session not found");
     };
 
-    let sessions = state.sessions.clone();
     let bufnr = query.buf;
     let stream = stream! {
         let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(15));
@@ -309,8 +296,6 @@ async fn events(State(state): State<HttpState>, Query(query): Query<SessionQuery
                 }
             }
         }
-
-        sessions.unsubscribe(bufnr, client_id).await;
     };
 
     Sse::new(stream)

@@ -1,22 +1,11 @@
 use crate::protocol::{ServerEvent, SessionEndReason, SnapshotResponse};
 use crate::render::LiveMarkdownRenderer;
-use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LifecycleState {
-    Idle,
-    Running,
-    Paused,
-    Stopped,
-}
-
-pub type ClientId = u64;
 
 #[derive(Debug, Clone)]
 pub struct BufferSnapshot {
@@ -35,129 +24,111 @@ struct Session {
     content_hash: u64,
     cursor_line: usize,
     cursor_col: usize,
-    subscribers: HashSet<ClientId>,
     html: String,
     source_path: Option<PathBuf>,
-    state: LifecycleState,
     broadcaster: broadcast::Sender<ServerEvent>,
 }
 
 impl Session {
-    fn new(bufnr: i64) -> Self {
+    fn new(snapshot: &BufferSnapshot, html: String, content_hash: u64) -> Self {
         let (broadcaster, _receiver) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
-            bufnr,
-            changedtick: 0,
-            content_hash: 0,
-            cursor_line: 1,
-            cursor_col: 0,
-            subscribers: HashSet::new(),
-            html: String::new(),
-            source_path: None,
-            state: LifecycleState::Idle,
+            bufnr: snapshot.bufnr,
+            changedtick: snapshot.changedtick,
+            content_hash,
+            cursor_line: snapshot.cursor_line,
+            cursor_col: snapshot.cursor_col,
+            html,
+            source_path: snapshot_source_path(snapshot.source_path.as_deref()),
             broadcaster,
         }
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct SessionManager {
-    sessions: Arc<RwLock<HashMap<i64, Session>>>,
-    active_bufnr: Arc<RwLock<Option<i64>>>,
-}
+    fn apply_snapshot(&mut self, snapshot: &BufferSnapshot, html: String, content_hash: u64) {
+        self.changedtick = snapshot.changedtick;
+        self.content_hash = content_hash;
+        self.cursor_line = snapshot.cursor_line;
+        self.cursor_col = snapshot.cursor_col;
+        self.html = html;
+        self.source_path = snapshot_source_path(snapshot.source_path.as_deref());
+    }
 
-impl Default for SessionManager {
-    fn default() -> Self {
-        Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            active_bufnr: Arc::new(RwLock::new(None)),
+    fn snapshot_response(&self) -> SnapshotResponse {
+        let filename = self
+            .source_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("buffer"));
+
+        SnapshotResponse {
+            bufnr: self.bufnr,
+            html: self.html.clone(),
+            cursor_line: self.cursor_line,
+            cursor_col: self.cursor_col,
+            filename,
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SessionManager {
+    active: Arc<RwLock<Option<Session>>>,
 }
 
 impl SessionManager {
     pub async fn start_session(&self, snapshot: BufferSnapshot, renderer: &LiveMarkdownRenderer) {
         let rendered_html = renderer.render(&snapshot.markdown);
-        let content_hash = content_hash(&snapshot.markdown);
+        let new_hash = content_hash(&snapshot.markdown);
 
-        let mut sessions = self.sessions.write().await;
-        let session = sessions
-            .entry(snapshot.bufnr)
-            .or_insert_with(|| Session::new(snapshot.bufnr));
+        let mut active = self.active.write().await;
+        if let Some(session) = active.as_mut()
+            && session.bufnr == snapshot.bufnr
+        {
+            session.apply_snapshot(&snapshot, rendered_html.clone(), new_hash);
+            let _ = session.broadcaster.send(ServerEvent::RenderFull {
+                bufnr: snapshot.bufnr,
+                html: rendered_html,
+                cursor_line: snapshot.cursor_line,
+            });
+            return;
+        }
 
-        session.state = LifecycleState::Running;
-        session.changedtick = snapshot.changedtick;
-        session.content_hash = content_hash;
-        session.cursor_line = snapshot.cursor_line;
-        session.cursor_col = snapshot.cursor_col;
-        session.html = rendered_html.clone();
-        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
-
+        let session = Session::new(&snapshot, rendered_html.clone(), new_hash);
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
             html: rendered_html,
             cursor_line: snapshot.cursor_line,
         });
-
-        drop(sessions);
-        *self.active_bufnr.write().await = Some(snapshot.bufnr);
+        *active = Some(session);
     }
 
     pub async fn stop_session(&self, bufnr: i64, reason: SessionEndReason) -> bool {
-        let mut sessions = self.sessions.write().await;
-        let Some(mut session) = sessions.remove(&bufnr) else {
+        let mut active = self.active.write().await;
+        let Some(session) = active.take() else {
             return false;
         };
 
-        session.state = LifecycleState::Stopped;
+        if session.bufnr != bufnr {
+            *active = Some(session);
+            return false;
+        }
+
         let _ = session
             .broadcaster
             .send(ServerEvent::SessionEnd { bufnr, reason });
-
-        drop(sessions);
-
-        let mut active = self.active_bufnr.write().await;
-        if active
-            .as_ref()
-            .is_some_and(|active_buf| *active_buf == bufnr)
-        {
-            *active = None;
-        }
 
         true
     }
 
     pub async fn stop_all(&self, reason: SessionEndReason) {
-        let mut sessions = self.sessions.write().await;
-        let removed: Vec<_> = sessions.drain().collect();
-        drop(sessions);
-
-        for (bufnr, mut session) in removed {
-            session.state = LifecycleState::Stopped;
+        let mut active = self.active.write().await;
+        if let Some(session) = active.take() {
             let _ = session.broadcaster.send(ServerEvent::SessionEnd {
-                bufnr,
-                reason: reason.clone(),
+                bufnr: session.bufnr,
+                reason,
             });
         }
-
-        *self.active_bufnr.write().await = None;
-    }
-
-    pub async fn pause_session(&self, bufnr: i64) {
-        let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.get_mut(&bufnr) {
-            session.state = LifecycleState::Paused;
-        }
-    }
-
-    pub async fn resume_session(&self, bufnr: i64) {
-        {
-            let mut sessions = self.sessions.write().await;
-            if let Some(session) = sessions.get_mut(&bufnr) {
-                session.state = LifecycleState::Running;
-            }
-        }
-        *self.active_bufnr.write().await = Some(bufnr);
     }
 
     pub async fn update_content(
@@ -168,10 +139,15 @@ impl SessionManager {
         let new_hash = content_hash(&snapshot.markdown);
 
         {
-            let sessions = self.sessions.read().await;
-            let Some(session) = sessions.get(&snapshot.bufnr) else {
+            let active = self.active.read().await;
+            let Some(session) = active.as_ref() else {
                 return false;
             };
+
+            if session.bufnr != snapshot.bufnr {
+                return false;
+            }
+
             if session.changedtick == snapshot.changedtick && session.content_hash == new_hash {
                 return false;
             }
@@ -179,21 +155,20 @@ impl SessionManager {
 
         let rendered_html = renderer.render(&snapshot.markdown);
 
-        let mut sessions = self.sessions.write().await;
-        let Some(session) = sessions.get_mut(&snapshot.bufnr) else {
+        let mut active = self.active.write().await;
+        let Some(session) = active.as_mut() else {
             return false;
         };
+
+        if session.bufnr != snapshot.bufnr {
+            return false;
+        }
 
         if session.changedtick == snapshot.changedtick && session.content_hash == new_hash {
             return false;
         }
 
-        session.changedtick = snapshot.changedtick;
-        session.content_hash = new_hash;
-        session.cursor_line = snapshot.cursor_line;
-        session.cursor_col = snapshot.cursor_col;
-        session.html = rendered_html.clone();
-        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
+        session.apply_snapshot(&snapshot, rendered_html.clone(), new_hash);
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
@@ -212,17 +187,16 @@ impl SessionManager {
         let rendered_html = renderer.render(&snapshot.markdown);
         let new_hash = content_hash(&snapshot.markdown);
 
-        let mut sessions = self.sessions.write().await;
-        let Some(session) = sessions.get_mut(&snapshot.bufnr) else {
+        let mut active = self.active.write().await;
+        let Some(session) = active.as_mut() else {
             return false;
         };
 
-        session.changedtick = snapshot.changedtick;
-        session.content_hash = new_hash;
-        session.cursor_line = snapshot.cursor_line;
-        session.cursor_col = snapshot.cursor_col;
-        session.html = rendered_html.clone();
-        session.source_path = snapshot_source_path(snapshot.source_path.as_deref());
+        if session.bufnr != snapshot.bufnr {
+            return false;
+        };
+
+        session.apply_snapshot(&snapshot, rendered_html.clone(), new_hash);
 
         let _ = session.broadcaster.send(ServerEvent::RenderFull {
             bufnr: snapshot.bufnr,
@@ -234,10 +208,14 @@ impl SessionManager {
     }
 
     pub async fn update_cursor(&self, bufnr: i64, line: usize, col: usize) -> bool {
-        let mut sessions = self.sessions.write().await;
-        let Some(session) = sessions.get_mut(&bufnr) else {
+        let mut active = self.active.write().await;
+        let Some(session) = active.as_mut() else {
             return false;
         };
+
+        if session.bufnr != bufnr {
+            return false;
+        }
 
         if session.cursor_line == line && session.cursor_col == col {
             return false;
@@ -253,37 +231,26 @@ impl SessionManager {
     }
 
     pub async fn has_session(&self, bufnr: i64) -> bool {
-        let sessions = self.sessions.read().await;
-        sessions.contains_key(&bufnr)
+        let active = self.active.read().await;
+        active
+            .as_ref()
+            .is_some_and(|session| session.bufnr == bufnr)
     }
 
     pub async fn snapshot(&self, bufnr: i64) -> Option<SnapshotResponse> {
-        let sessions = self.sessions.read().await;
-        let session = sessions.get(&bufnr)?;
-        if session.state == LifecycleState::Stopped {
+        let active = self.active.read().await;
+        let session = active.as_ref()?;
+        if session.bufnr != bufnr {
             return None;
         }
 
-        let filename = session
-            .source_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| "buffer".to_string());
-
-        Some(SnapshotResponse {
-            bufnr: session.bufnr,
-            html: session.html.clone(),
-            cursor_line: session.cursor_line,
-            cursor_col: session.cursor_col,
-            filename,
-        })
+        Some(session.snapshot_response())
     }
 
     pub async fn resolve_local_asset_path(&self, bufnr: i64, raw_path: &str) -> Option<PathBuf> {
-        let sessions = self.sessions.read().await;
-        let session = sessions.get(&bufnr)?;
-        if session.state == LifecycleState::Stopped {
+        let active = self.active.read().await;
+        let session = active.as_ref()?;
+        if session.bufnr != bufnr {
             return None;
         }
 
@@ -311,34 +278,24 @@ impl SessionManager {
         Some(resolved)
     }
 
-    pub async fn subscribe(
-        &self,
-        bufnr: i64,
-        client_id: ClientId,
-    ) -> Option<broadcast::Receiver<ServerEvent>> {
-        let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&bufnr)?;
-        if session.state == LifecycleState::Stopped {
+    pub async fn subscribe(&self, bufnr: i64) -> Option<broadcast::Receiver<ServerEvent>> {
+        let active = self.active.read().await;
+        let session = active.as_ref()?;
+        if session.bufnr != bufnr {
             return None;
         }
 
-        session.subscribers.insert(client_id);
         Some(session.broadcaster.subscribe())
     }
 
-    pub async fn unsubscribe(&self, bufnr: i64, client_id: ClientId) {
-        let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.get_mut(&bufnr) {
-            session.subscribers.remove(&client_id);
-        }
-    }
-
     pub async fn session_count(&self) -> usize {
-        self.sessions.read().await.len()
+        let active = self.active.read().await;
+        if active.is_some() { 1 } else { 0 }
     }
 
     pub async fn active_bufnr(&self) -> Option<i64> {
-        *self.active_bufnr.read().await
+        let active = self.active.read().await;
+        active.as_ref().map(|session| session.bufnr)
     }
 }
 
@@ -477,7 +434,7 @@ fn is_supported_image_path(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{BufferSnapshot, LifecycleState, SessionManager};
+    use super::{BufferSnapshot, SessionManager};
     use crate::protocol::{ServerEvent, SessionEndReason};
     use crate::render::LiveMarkdownRenderer;
     use std::fs;
@@ -536,6 +493,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn starting_new_buffer_replaces_previous_session() {
+        let sessions = SessionManager::default();
+        let renderer = LiveMarkdownRenderer::default();
+
+        sessions
+            .start_session(
+                BufferSnapshot {
+                    bufnr: 11,
+                    changedtick: 1,
+                    markdown: String::from("# first"),
+                    cursor_line: 1,
+                    cursor_col: 0,
+                    source_path: None,
+                },
+                &renderer,
+            )
+            .await;
+
+        sessions
+            .start_session(
+                BufferSnapshot {
+                    bufnr: 22,
+                    changedtick: 1,
+                    markdown: String::from("# second"),
+                    cursor_line: 1,
+                    cursor_col: 0,
+                    source_path: None,
+                },
+                &renderer,
+            )
+            .await;
+
+        assert_eq!(sessions.session_count().await, 1);
+        assert_eq!(sessions.active_bufnr().await, Some(22));
+        assert!(!sessions.has_session(11).await);
+        assert!(sessions.snapshot(11).await.is_none());
+        assert!(sessions.snapshot(22).await.is_some());
+    }
+
+    #[tokio::test]
     async fn cursor_updates_ignore_duplicates() {
         let sessions = SessionManager::default();
         let renderer = LiveMarkdownRenderer::default();
@@ -578,9 +575,9 @@ mod tests {
             )
             .await;
 
-        let mut rx = sessions.subscribe(3, 99).await.expect("valid subscription");
+        let mut rx = sessions.subscribe(3).await.expect("valid subscription");
 
-        assert!(sessions.subscribe(99, 100).await.is_none());
+        assert!(sessions.subscribe(99).await.is_none());
         assert!(sessions.update_cursor(3, 4, 0).await);
 
         let event = rx.recv().await.expect("event");
@@ -592,11 +589,23 @@ mod tests {
             _ => panic!("unexpected event"),
         }
 
-        sessions.pause_session(3).await;
-        assert!(sessions.has_session(3).await);
+        sessions
+            .start_session(
+                BufferSnapshot {
+                    bufnr: 30,
+                    changedtick: 1,
+                    markdown: String::from("# switched"),
+                    cursor_line: 1,
+                    cursor_col: 0,
+                    source_path: None,
+                },
+                &renderer,
+            )
+            .await;
 
-        sessions.resume_session(3).await;
-        assert_eq!(sessions.active_bufnr().await, Some(3));
+        assert!(!sessions.has_session(3).await);
+        assert!(sessions.has_session(30).await);
+        assert_eq!(sessions.active_bufnr().await, Some(30));
 
         sessions.stop_all(SessionEndReason::Stopped).await;
         assert_eq!(sessions.session_count().await, 0);
@@ -622,10 +631,7 @@ mod tests {
             )
             .await;
 
-        let mut rx = sessions
-            .subscribe(4, 777)
-            .await
-            .expect("valid subscription");
+        let mut rx = sessions.subscribe(4).await.expect("valid subscription");
 
         assert!(
             sessions
@@ -709,13 +715,5 @@ mod tests {
         assert!(missing_session.is_none());
 
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn lifecycle_states_exist_for_transitions() {
-        assert_eq!(LifecycleState::Idle as u8, 0);
-        assert_eq!(LifecycleState::Running as u8, 1);
-        assert_eq!(LifecycleState::Paused as u8, 2);
-        assert_eq!(LifecycleState::Stopped as u8, 3);
     }
 }
