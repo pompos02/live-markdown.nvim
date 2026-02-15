@@ -6,31 +6,31 @@
     <title>__FILENAME__ - Markdown Preview</title>
     <style>
       :root {
-        --bg: #0a0a0a;
-        --surface: #111111;
-        --surface-2: #0f0f0f;
-        --border: #262626;
-        --text: #c8c8c8;
-        --text-strong: #f0f0f0;
-        --text-muted: #8c8c8c;
-        --accent: #b6b6b6;
-        --accent-soft: rgba(94, 176, 255, 0.18);
-        --table-head: #171b20;
-        --table-row: #11161b;
-        --table-row-alt: #101319;
-        --task-bg: #121a21;
-        --task-border: #283a4a;
-        --task-done: #7f98ab;
-        --code-bg: #0b0b0b;
-        --inline-bg: #171717;
-        --alert-note: #4493f8;
-        --alert-tip: #3fb950;
-        --alert-important: #ab7df8;
-        --alert-warning: #d29922;
-        --alert-caution: #f85149;
-        --warn-bg: #201516;
-        --warn-border: #4d3033;
-        --warn-text: #e3b9bd;
+        --bg: #151515;
+        --surface: #1a1a1a;
+        --surface-2: #181818;
+        --border: #333333;
+        --text: #dddddd;
+        --text-strong: #bbbbbb;
+        --text-muted: #888888;
+        --accent: #fd8000;
+        --accent-soft: rgba(253, 128, 0, 0.18);
+        --table-head: #222222;
+        --table-row: #1a1a1a;
+        --table-row-alt: #1e1e1e;
+        --task-bg: #1f1a14;
+        --task-border: #4a3828;
+        --task-done: #888888;
+        --code-bg: #333333;
+        --inline-bg: #333333;
+        --alert-note: #fd8000;
+        --alert-tip: #4a9a6a;
+        --alert-important: #8a6ab3;
+        --alert-warning: #c09040;
+        --alert-caution: #c06050;
+        --warn-bg: #2a2018;
+        --warn-border: #5a4030;
+        --warn-text: #c09070;
       }
 
       * {
@@ -85,9 +85,9 @@
       }
 
       #preview-root {
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        background: var(--surface-2);
+        border: none;
+        border-radius: 0;
+        background: var(--bg);
         padding: 20px 22px;
         min-height: 72vh;
       }
@@ -103,7 +103,7 @@
       }
 
       #md-root .is-cursor-line {
-        background: rgba(170, 170, 170, 0.12);
+        background: rgba(128, 128, 128, 0.08);
       }
 
       #md-root h1,
@@ -124,7 +124,7 @@
       }
 
       #md-root a {
-        color: #58a6ff;
+        color: #fd8000;
         text-decoration: underline;
       }
 
@@ -140,7 +140,7 @@
         border-left: 2px solid var(--accent);
         margin: 0 0 1em;
         padding: 0.2em 0 0.2em 0.9em;
-        color: #ababab;
+        color: #aaaaaa;
       }
 
       #md-root .markdown-alert {
@@ -221,15 +221,15 @@
 
       #md-root :not(pre) > code {
         background: var(--inline-bg);
-        color: #cfe2ff;
+        color: #f7f7f7;
         padding: 0.15em 0.35em;
         border-radius: 3px;
-        border: 1px solid var(--border);
+        border: 1px solid #000000;
       }
 
       #md-root pre {
         position: relative;
-        border: 1px solid var(--border);
+        border: 1px solid #000000;
         background: var(--code-bg);
         border-radius: 4px;
         padding: 24px 14px 12px;
@@ -248,51 +248,51 @@
       }
 
       #md-root pre code {
-        color: #d7e8ff;
+        color: #f7f7f7;
       }
 
       #md-root .tok-comment {
-        color: #6f89ab;
+        color: #999999;
       }
 
       #md-root .tok-keyword {
-        color: #ca9eff;
+        color: #8aadff;
         font-weight: 600;
       }
 
       #md-root .tok-string {
-        color: #9be97f;
+        color: #ff8877;
       }
 
       #md-root .tok-number {
-        color: #ffbe78;
+        color: #00dddd;
       }
 
       #md-root .tok-function {
-        color: #61d4ff;
+        color: #44dd00;
       }
 
       #md-root .tok-constant {
-        color: #ff9ecb;
+        color: #44dd77;
       }
 
       #md-root .tok-variable {
-        color: #8fe3d2;
+        color: #00dddd;
       }
 
       #md-root .tok-property {
-        color: #f6dca3;
+        color: #88cc77;
       }
 
       #md-root table {
         border-collapse: separate;
         border-spacing: 0;
         width: 100%;
-        background: linear-gradient(180deg, #11161a 0%, #101318 100%);
+        background: linear-gradient(180deg, #1a1a1a 0%, #1e1e1e 100%);
         border: 1px solid var(--border);
         border-radius: 8px;
         overflow: hidden;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
       }
 
       #md-root td,
@@ -318,7 +318,7 @@
       }
 
       #md-root tr:hover td {
-        background: #16222d;
+        background: #252525;
       }
 
       #md-root tr > :last-child {
@@ -331,7 +331,7 @@
 
       #md-root hr {
         border: 0;
-        border-top: 1px solid var(--border);
+        border-top: 1px solid #444444;
       }
 
       #md-root input[type="checkbox"] {
@@ -350,8 +350,8 @@
       }
 
       #md-root input[type="checkbox"]:checked {
-        background: #5eb0ff;
-        border-color: #5eb0ff;
+        background: #fd8000;
+        border-color: #fd8000;
       }
 
       #md-root input[type="checkbox"]:checked::after {
@@ -382,8 +382,8 @@
         padding: 0.32em 0.55em 0.35em 0.45em;
         border: 1px solid var(--task-border);
         border-radius: 6px;
-        background: linear-gradient(180deg, var(--task-bg), #10171e);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
+        background: linear-gradient(180deg, var(--task-bg), #1a1510);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
       }
 
       #md-root li.task-list-item + li.task-list-item,
@@ -393,8 +393,8 @@
 
       #md-root li.task-list-item:has(> input[type="checkbox"]:checked),
       #md-root ul.contains-task-list > li:has(> input[type="checkbox"]:checked) {
-        border-color: #35556e;
-        background: linear-gradient(180deg, rgba(38, 65, 87, 0.55), var(--accent-soft));
+        border-color: #6a5038;
+        background: linear-gradient(180deg, rgba(80, 60, 40, 0.9), var(--accent-soft));
         color: var(--task-done);
       }
 
