@@ -1,1467 +1,1467 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>__FILENAME__ - Markdown Preview</title>
-    <style>
-      :root {
-        --bg: #151515;
-        --surface: #1a1a1a;
-        --surface-2: #181818;
-        --border: #333333;
-        --text: #dddddd;
-        --text-strong: #bbbbbb;
-        --text-muted: #888888;
-        --accent: #fd8000;
-        --accent-soft: rgba(253, 128, 0, 0.18);
-        --table-head: #222222;
-        --table-row: #1a1a1a;
-        --table-row-alt: #1e1e1e;
-        --task-bg: #1f1a14;
-        --task-border: #4a3828;
-        --task-done: #888888;
-        --code-bg: #333333;
-        --inline-bg: #222222;
-        --alert-note: #fd8000;
-        --alert-tip: #4a9a6a;
-        --alert-important: #8a6ab3;
-        --alert-warning: #c09040;
-        --alert-caution: #c06050;
-        --warn-bg: #2a2018;
-        --warn-border: #5a4030;
-        --warn-text: #c09070;
-      }
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>__FILENAME__ - Markdown Preview</title>
+        <style>
+        :root {
+            --bg: #151515;
+            --surface: #1a1a1a;
+            --surface-2: #181818;
+            --border: #333333;
+            --text: #dddddd;
+            --text-strong: #bbbbbb;
+            --text-muted: #888888;
+            --accent: #fd8000;
+            --accent-soft: rgba(253, 128, 0, 0.18);
+            --table-head: #222222;
+            --table-row: #1a1a1a;
+            --table-row-alt: #1e1e1e;
+            --task-bg: #1f1a14;
+            --task-border: #4a3828;
+            --task-done: #888888;
+            --code-bg: #333333;
+            --inline-bg: #222222;
+            --alert-note: #fd8000;
+            --alert-tip: #4a9a6a;
+            --alert-important: #8a6ab3;
+            --alert-warning: #c09040;
+            --alert-caution: #c06050;
+            --warn-bg: #2a2018;
+            --warn-border: #5a4030;
+            --warn-text: #c09070;
+        }
 
-      * {
-        box-sizing: border-box;
-      }
+        * {
+            box-sizing: border-box;
+        }
 
-      body {
-        margin: 0;
-        color: var(--text);
-        font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
-        font-size: 15px;
-        background: var(--bg);
-      }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
+            font-size: 15px;
+            background: var(--bg);
+        }
 
-      .shell {
-        max-width: 860px;
-        margin: 0 auto;
-        padding: 18px 14px 28px;
-      }
-
-      .preview-header {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        align-items: center;
-        gap: 10px;
-        margin: 2px 0 12px;
-      }
-
-      .filename-line {
-        grid-column: 2;
-        margin: 0;
-        color: var(--text-strong);
-        font-size: 1.55rem;
-        font-weight: 700;
-        letter-spacing: 0.01em;
-        text-align: center;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .status-line {
-        grid-column: 3;
-        margin: 0;
-        color: var(--text-muted);
-        font-size: 0.74rem;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        flex: 0 0 auto;
-        justify-self: end;
-        text-align: right;
-      }
-
-      #preview-root {
-        border: none;
-        border-radius: 0;
-        background: var(--bg);
-        padding: 20px 22px;
-        min-height: 72vh;
-        overflow-anchor: none;
-      }
-
-      #md-root {
-        line-height: 1.62;
-        font-size: 0.95rem;
-        overflow-anchor: none;
-      }
-
-      #md-root [data-line] {
-        border-radius: 3px;
-        transition: background-color 90ms linear, box-shadow 90ms linear;
-      }
-
-      #md-root .is-cursor-line {
-        background: rgba(128, 128, 128, 0.08);
-      }
-
-      #md-root h1,
-      #md-root h2,
-      #md-root h3,
-      #md-root h4,
-      #md-root h5,
-      #md-root h6 {
-        color: var(--text-strong);
-        line-height: 1.28;
-        margin-top: 1.4em;
-        margin-bottom: 0.4em;
-      }
-
-      #md-root h1 {
-        border-bottom: 1px solid var(--border);
-        padding-bottom: 0.25em;
-      }
-
-      #md-root a {
-        color: #fd8000;
-        text-decoration: underline;
-      }
-
-      #md-root img {
-        display: block;
-        max-width: 100%;
-        height: auto;
-        margin: 0.75em 0;
-        border-radius: 4px;
-      }
-
-      #md-root blockquote {
-        border-left: 2px solid var(--accent);
-        margin: 0 0 1em;
-        padding: 0.2em 0 0.2em 0.9em;
-        color: #aaaaaa;
-      }
-
-      #md-root .markdown-alert {
-        padding: 0.5em 1em 0.7em;
-        color: var(--text);
-        border-left-width: 0.25em;
-      }
-
-      #md-root .markdown-alert > :first-child {
-        margin-top: 0;
-      }
-
-      #md-root .markdown-alert > :last-child {
-        margin-bottom: 0;
-      }
-
-      #md-root .markdown-alert .markdown-alert-title {
-        display: flex;
-        align-items: center;
-        gap: 0.5em;
-        margin-bottom: 0.55em;
-        font-weight: 600;
-        line-height: 1;
-      }
-
-      #md-root .markdown-alert .markdown-alert-icon {
-        width: 1em;
-        height: 1em;
-        fill: currentColor;
-        flex: 0 0 auto;
-      }
-
-      #md-root .markdown-alert.markdown-alert-note {
-        border-left-color: var(--alert-note);
-      }
-
-      #md-root .markdown-alert.markdown-alert-note .markdown-alert-title {
-        color: var(--alert-note);
-      }
-
-      #md-root .markdown-alert.markdown-alert-tip {
-        border-left-color: var(--alert-tip);
-      }
-
-      #md-root .markdown-alert.markdown-alert-tip .markdown-alert-title {
-        color: var(--alert-tip);
-      }
-
-      #md-root .markdown-alert.markdown-alert-important {
-        border-left-color: var(--alert-important);
-      }
-
-      #md-root .markdown-alert.markdown-alert-important .markdown-alert-title {
-        color: var(--alert-important);
-      }
-
-      #md-root .markdown-alert.markdown-alert-warning {
-        border-left-color: var(--alert-warning);
-      }
-
-      #md-root .markdown-alert.markdown-alert-warning .markdown-alert-title {
-        color: var(--alert-warning);
-      }
-
-      #md-root .markdown-alert.markdown-alert-caution {
-        border-left-color: var(--alert-caution);
-      }
-
-      #md-root .markdown-alert.markdown-alert-caution .markdown-alert-title {
-        color: var(--alert-caution);
-      }
-
-      #md-root code,
-      #md-root pre,
-      #md-root .mono {
-        font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
-      }
-
-      #md-root :not(pre) > code {
-        background: var(--inline-bg);
-        color: #f7f7f7;
-        padding: 0.15em 0.35em;
-        border-radius: 6px;
-        border: none;
-      }
-
-      #md-root pre {
-        position: relative;
-        border: 1px solid #000000;
-        background: var(--code-bg);
-        border-radius: 4px;
-        padding: 24px 14px 12px;
-        overflow-x: auto;
-      }
-
-      #md-root pre[data-lang]::before {
-        content: attr(data-lang);
-        position: absolute;
-        top: 6px;
-        right: 10px;
-        font-size: 0.68rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-      }
-
-      #md-root pre code {
-        color: #e4e4ef;
-      }
-
-      #md-root .tok-comment {
-        color: #95a99f;
-      }
-
-      #md-root .tok-keyword {
-        color: #ffdd33;
-        font-weight: 600;
-      }
-
-      #md-root .tok-string {
-        color: #73c936;
-      }
-
-      /* #md-root .tok-number { */
-      /*   color: #f43841; */
-      /* } */
-
-      #md-root .tok-comment {
-        color: #B17F3D;
-      }
-
-      #md-root .tok-function {
-        color: #96a6c8;
-      }
-
-      #md-root .tok-constant {
-        color: #9e95c7;
-      }
-
-      #md-root .tok-variable {
-        color: #ffffff;
-      }
-
-      #md-root .tok-property {
-        color: #cc8c3c;
-      }
-
-      #md-root table {
-        border-collapse: separate;
-        border-spacing: 0;
-        width: 100%;
-        background: linear-gradient(180deg, #1a1a1a 0%, #1e1e1e 100%);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
-      }
-
-      #md-root td,
-      #md-root th {
-        border-right: 1px solid var(--border);
-        border-bottom: 1px solid var(--border);
-        padding: 8px 10px;
-      }
-
-      #md-root th {
-        background: var(--table-head);
-        color: var(--text-strong);
-        text-align: left;
-        letter-spacing: 0.02em;
-      }
-
-      #md-root td {
-        background: var(--table-row);
-      }
-
-      #md-root tr:nth-child(even) td {
-        background: var(--table-row-alt);
-      }
-
-      #md-root tr:hover td {
-        background: #252525;
-      }
-
-      #md-root tr > :last-child {
-        border-right: 0;
-      }
-
-      #md-root table tr:last-child > * {
-        border-bottom: 0;
-      }
-
-      #md-root hr {
-        border: 0;
-        border-top: 1px solid #444444;
-      }
-
-      #md-root input[type="checkbox"] {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 15px;
-        height: 15px;
-        border: 1.5px solid var(--text-muted);
-        border-radius: 4px;
-        background: var(--bg);
-        vertical-align: middle;
-        margin-right: 8px;
-        cursor: default;
-        position: relative;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-      }
-
-      #md-root input[type="checkbox"]:checked {
-        background: #fd8000;
-        border-color: #fd8000;
-      }
-
-      #md-root input[type="checkbox"]:checked::after {
-        content: '';
-        position: absolute;
-        left: 4px;
-        top: 1px;
-        width: 4px;
-        height: 8px;
-        border: solid var(--bg);
-        border-width: 0 2px 2px 0;
-        transform: rotate(45deg);
-      }
-
-      #md-root ul,
-      #md-root ol {
-        padding-left: 1.2em;
-      }
-
-      #md-root li {
-        margin: 0.26em 0;
-      }
-
-      #md-root li.task-list-item,
-      #md-root ul.contains-task-list > li {
-        list-style: none;
-        margin-left: -0.5em;
-        padding: 0.32em 0.55em 0.35em 0.45em;
-        border: 1px solid var(--task-border);
-        border-radius: 6px;
-        background: linear-gradient(180deg, var(--task-bg), #1a1510);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
-      }
-
-      #md-root li.task-list-item + li.task-list-item,
-      #md-root ul.contains-task-list > li + li {
-        margin-top: 0.42em;
-      }
-
-      #md-root li.task-list-item:has(> input[type="checkbox"]:checked),
-      #md-root ul.contains-task-list > li:has(> input[type="checkbox"]:checked) {
-        border-color: #6a5038;
-        background: linear-gradient(180deg, rgba(80, 60, 40, 0.9), var(--accent-soft));
-        color: var(--task-done);
-      }
-
-      .warning {
-        margin-top: 10px;
-        border-radius: 4px;
-        border: 1px solid var(--warn-border);
-        background: var(--warn-bg);
-        color: var(--warn-text);
-        padding: 8px 10px;
-        display: none;
-      }
-
-      @media (max-width: 900px) {
         .shell {
-          padding: 10px;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 18px 14px 28px;
+        }
+
+        .preview-header {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 10px;
+            margin: 2px 0 12px;
+        }
+
+        .filename-line {
+            grid-column: 2;
+            margin: 0;
+            color: var(--text-strong);
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-line {
+            grid-column: 3;
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            flex: 0 0 auto;
+            justify-self: end;
+            text-align: right;
         }
 
         #preview-root {
-          padding: 16px 14px;
-          border-radius: 6px;
-          min-height: calc(100vh - 80px);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="shell">
-      <header class="preview-header">
-        <p id="filename-line" class="filename-line">buffer</p>
-        <p id="status-line" class="status-line">Connecting...</p>
-      </header>
-      <section id="preview-root">
-        <article id="md-root">
-          <p data-line="1">Waiting for snapshot...</p>
-        </article>
-      </section>
-      <section id="warning" class="warning"></section>
-    </main>
-
-    <script>
-      (() => {
-        const AUTO_SCROLL = __AUTO_SCROLL__;
-        const COMFORT_TOP = Number("__SCROLL_TOP__");
-        const COMFORT_BOTTOM = Number("__SCROLL_BOTTOM__");
-        const FOLLOW_RATIO = Math.max(0.05, Math.min(0.95, (COMFORT_TOP + COMFORT_BOTTOM) / 2));
-
-        const statusLine = document.getElementById("status-line");
-        const filenameLine = document.getElementById("filename-line");
-        const warning = document.getElementById("warning");
-        const previewRoot = document.getElementById("preview-root");
-
-        let currentArticle = document.getElementById("md-root");
-        let lineAnchors = [];
-        let latestCursorLine = null;
-        let activeLineElement = null;
-        let manualScrollCooldownUntil = 0;
-        let source = null;
-        let followTargetTop = null;
-        let followVelocity = 0;
-        let followFrame = 0;
-        let followLastTs = 0;
-        let activePollTimer = null;
-        let pendingRenderPayload = null;
-        let pendingRenderFrame = 0;
-
-        const syntaxSignatureByCode = new WeakMap();
-
-        const search = new URLSearchParams(window.location.search);
-        const initialBufnr = (search.get("buf") || "").trim();
-        let currentBufnr = initialBufnr || null;
-
-        const LANGUAGE_ALIASES = Object.freeze({
-          rs: "rust",
-          js: "javascript",
-          jsx: "javascript",
-          mjs: "javascript",
-          cjs: "javascript",
-          ts: "typescript",
-          tsx: "typescript",
-          py: "python",
-          sh: "shell",
-          bash: "shell",
-          shellsession: "shell",
-          "shell-session": "shell",
-          console: "shell",
-          zsh: "shell",
-          fish: "shell",
-          cxx: "cpp",
-          cc: "cpp",
-          "c++": "cpp",
-          hpp: "cpp",
-          hxx: "cpp",
-          yml: "yaml",
-          jsonc: "javascript",
-          psql: "sql",
-          mysql: "sql",
-          plsql: "sql",
-          postgresql: "sql",
-          sqlite: "sql",
-          plain: "plain",
-          plaintext: "plain",
-          md: "markdown",
-          mkd: "markdown",
-          mdown: "markdown",
-          txt: "plain",
-          text: "plain"
-        });
-
-        const KEYWORDS_BY_LANGUAGE = Object.freeze({
-          rust: ["as", "async", "await", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while"],
-          javascript: ["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import", "in", "instanceof", "let", "new", "null", "of", "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "yield"],
-          typescript: ["abstract", "any", "as", "async", "await", "break", "case", "catch", "class", "const", "continue", "declare", "default", "do", "else", "enum", "export", "extends", "false", "finally", "for", "from", "function", "if", "implements", "import", "in", "infer", "interface", "is", "keyof", "let", "module", "namespace", "never", "new", "null", "readonly", "return", "satisfies", "static", "super", "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var", "void", "while"],
-          python: ["and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"],
-          shell: ["case", "do", "done", "elif", "else", "esac", "export", "fi", "for", "function", "if", "in", "local", "readonly", "return", "select", "then", "until", "while"],
-          go: ["break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "if", "import", "interface", "map", "package", "range", "return", "select", "struct", "switch", "type", "var"],
-          c: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"],
-          cpp: ["alignas", "alignof", "auto", "bool", "break", "case", "catch", "char", "class", "const", "constexpr", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "nullptr", "operator", "private", "protected", "public", "return", "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw", "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "while"],
-          java: ["abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "false", "final", "finally", "float", "for", "if", "implements", "import", "instanceof", "int", "interface", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "void", "volatile", "while"],
-          ruby: ["BEGIN", "END", "alias", "and", "begin", "break", "case", "class", "def", "defined?", "do", "else", "elsif", "end", "ensure", "false", "for", "if", "in", "module", "next", "nil", "not", "or", "redo", "rescue", "retry", "return", "self", "super", "then", "true", "undef", "unless", "until", "when", "while", "yield"],
-          sql: ["all", "and", "as", "asc", "between", "by", "case", "create", "delete", "desc", "distinct", "drop", "else", "end", "exists", "from", "group", "having", "in", "inner", "insert", "into", "is", "join", "left", "limit", "not", "null", "on", "or", "order", "outer", "right", "select", "set", "table", "then", "union", "update", "values", "when", "where"]
-        });
-
-        const C_STYLE_LANGUAGES = new Set(["rust", "javascript", "typescript", "go", "c", "cpp", "java", "sql"]);
-        const HASH_COMMENT_LANGUAGES = new Set(["python", "shell", "ruby", "yaml", "toml", "markdown"]);
-        const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
-        const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
-
-        function setStatus(message) {
-          statusLine.textContent = message;
+            border: none;
+            border-radius: 0;
+            background: var(--bg);
+            padding: 20px 22px;
+            min-height: 72vh;
+            overflow-anchor: none;
         }
 
-        function filenameFromPath(value) {
-          const trimmed = (value || "").trim();
-          if (!trimmed) {
-            return "buffer";
-          }
-
-          const normalized = trimmed.replaceAll("\\", "/");
-          const parts = normalized.split("/").filter(Boolean);
-          return parts[parts.length - 1] || trimmed;
+        #md-root {
+            line-height: 1.62;
+            font-size: 0.95rem;
+            overflow-anchor: none;
         }
 
-        function setFilename(value) {
-          const label = filenameFromPath(value);
-          filenameLine.textContent = label;
-          document.title = label + " - Markdown Preview";
+        #md-root [data-line] {
+            border-radius: 3px;
+            transition: background-color 90ms linear, box-shadow 90ms linear;
         }
 
-        function showWarning(message) {
-          warning.style.display = "block";
-          warning.textContent = message;
+        #md-root .is-cursor-line {
+            background: rgba(128, 128, 128, 0.08);
         }
 
-        function clearWarning() {
-          warning.style.display = "none";
-          warning.textContent = "";
+        #md-root h1,
+        #md-root h2,
+        #md-root h3,
+        #md-root h4,
+        #md-root h5,
+        #md-root h6 {
+            color: var(--text-strong);
+            line-height: 1.28;
+            margin-top: 1.4em;
+            margin-bottom: 0.4em;
         }
 
-        async function getActiveBufnr() {
-          let response;
-          try {
-            response = await fetch("/active", { cache: "no-store" });
-          } catch (_error) {
-            return null;
-          }
-
-          if (!response.ok) {
-            return null;
-          }
-
-          let payload;
-          try {
-            payload = await response.json();
-          } catch (_error) {
-            return null;
-          }
-
-          if (!payload || payload.bufnr == null) {
-            return null;
-          }
-
-          return String(payload.bufnr);
+        #md-root h1 {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.25em;
         }
 
-        function hasUrlScheme(value) {
-          if (/^[a-zA-Z]:[\\/]/.test(value)) {
-            return false;
-          }
-          return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value);
+        #md-root a {
+            color: #fd8000;
+            text-decoration: underline;
         }
 
-        function normalizeLocalAssetPath(raw) {
-          let value = raw.trim();
-          if (!value) {
-            return null;
-          }
-
-          if (value.startsWith("//") || value.startsWith("#")) {
-            return null;
-          }
-
-          const lower = value.toLowerCase();
-          if (hasUrlScheme(value) && !lower.startsWith("file://")) {
-            return null;
-          }
-
-          if (lower.startsWith("file://")) {
-            value = value.slice(7);
-          }
-
-          const queryIdx = value.indexOf("?");
-          if (queryIdx >= 0) {
-            value = value.slice(0, queryIdx);
-          }
-
-          const hashIdx = value.indexOf("#");
-          if (hashIdx >= 0) {
-            value = value.slice(0, hashIdx);
-          }
-
-          if (!value) {
-            return null;
-          }
-
-          try {
-            value = decodeURIComponent(value);
-          } catch (_error) {
-            // Keep the original value when decoding fails.
-          }
-
-          return value;
+        #md-root img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: 0.75em 0;
+            border-radius: 4px;
         }
 
-        function rewriteLocalImageSources(root) {
-          const images = root.querySelectorAll("img[src]");
-          for (const image of images) {
-            const rawSrc = image.getAttribute("src");
-            if (!rawSrc) {
-              continue;
+        #md-root blockquote {
+            border-left: 2px solid var(--accent);
+            margin: 0 0 1em;
+            padding: 0.2em 0 0.2em 0.9em;
+            color: #aaaaaa;
+        }
+
+        #md-root .markdown-alert {
+            padding: 0.5em 1em 0.7em;
+            color: var(--text);
+            border-left-width: 0.25em;
+        }
+
+        #md-root .markdown-alert > :first-child {
+            margin-top: 0;
+        }
+
+        #md-root .markdown-alert > :last-child {
+            margin-bottom: 0;
+        }
+
+        #md-root .markdown-alert .markdown-alert-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            margin-bottom: 0.55em;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        #md-root .markdown-alert .markdown-alert-icon {
+            width: 1em;
+            height: 1em;
+            fill: currentColor;
+            flex: 0 0 auto;
+        }
+
+        #md-root .markdown-alert.markdown-alert-note {
+            border-left-color: var(--alert-note);
+        }
+
+        #md-root .markdown-alert.markdown-alert-note .markdown-alert-title {
+            color: var(--alert-note);
+        }
+
+        #md-root .markdown-alert.markdown-alert-tip {
+            border-left-color: var(--alert-tip);
+        }
+
+        #md-root .markdown-alert.markdown-alert-tip .markdown-alert-title {
+            color: var(--alert-tip);
+        }
+
+        #md-root .markdown-alert.markdown-alert-important {
+            border-left-color: var(--alert-important);
+        }
+
+        #md-root .markdown-alert.markdown-alert-important .markdown-alert-title {
+            color: var(--alert-important);
+        }
+
+        #md-root .markdown-alert.markdown-alert-warning {
+            border-left-color: var(--alert-warning);
+        }
+
+        #md-root .markdown-alert.markdown-alert-warning .markdown-alert-title {
+            color: var(--alert-warning);
+        }
+
+        #md-root .markdown-alert.markdown-alert-caution {
+            border-left-color: var(--alert-caution);
+        }
+
+        #md-root .markdown-alert.markdown-alert-caution .markdown-alert-title {
+            color: var(--alert-caution);
+        }
+
+        #md-root code,
+        #md-root pre,
+        #md-root .mono {
+            font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
+        }
+
+        #md-root :not(pre) > code {
+            background: var(--inline-bg);
+            color: #f7f7f7;
+            padding: 0.15em 0.35em;
+            border-radius: 6px;
+            border: none;
+        }
+
+        #md-root pre {
+            position: relative;
+            border: 1px solid #000000;
+            background: var(--code-bg);
+            border-radius: 4px;
+            padding: 24px 14px 12px;
+            overflow-x: auto;
+        }
+
+        #md-root pre[data-lang]::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            font-size: 0.68rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        #md-root pre code {
+            color: #e4e4ef;
+        }
+
+        #md-root .tok-comment {
+            color: #95a99f;
+        }
+
+        #md-root .tok-keyword {
+            color: #ffdd33;
+            font-weight: 600;
+        }
+
+        #md-root .tok-string {
+            color: #73c936;
+        }
+
+        /* #md-root .tok-number { */
+        /*   color: #f43841; */
+        /* } */
+
+        #md-root .tok-comment {
+            color: #B17F3D;
+        }
+
+        #md-root .tok-function {
+            color: #96a6c8;
+        }
+
+        #md-root .tok-constant {
+            color: #9e95c7;
+        }
+
+        #md-root .tok-variable {
+            color: #ffffff;
+        }
+
+        #md-root .tok-property {
+            color: #cc8c3c;
+        }
+
+        #md-root table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            background: linear-gradient(180deg, #1a1a1a 0%, #1e1e1e 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+        }
+
+        #md-root td,
+        #md-root th {
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 10px;
+        }
+
+        #md-root th {
+            background: var(--table-head);
+            color: var(--text-strong);
+            text-align: left;
+            letter-spacing: 0.02em;
+        }
+
+        #md-root td {
+            background: var(--table-row);
+        }
+
+        #md-root tr:nth-child(even) td {
+            background: var(--table-row-alt);
+        }
+
+        #md-root tr:hover td {
+            background: #252525;
+        }
+
+        #md-root tr > :last-child {
+            border-right: 0;
+        }
+
+        #md-root table tr:last-child > * {
+            border-bottom: 0;
+        }
+
+        #md-root hr {
+            border: 0;
+            border-top: 1px solid #444444;
+        }
+
+        #md-root input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border: 1.5px solid var(--text-muted);
+            border-radius: 4px;
+            background: var(--bg);
+            vertical-align: middle;
+            margin-right: 8px;
+            cursor: default;
+            position: relative;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        #md-root input[type="checkbox"]:checked {
+            background: #fd8000;
+            border-color: #fd8000;
+        }
+
+        #md-root input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 1px;
+            width: 4px;
+            height: 8px;
+            border: solid var(--bg);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        #md-root ul,
+        #md-root ol {
+            padding-left: 1.2em;
+        }
+
+        #md-root li {
+            margin: 0.26em 0;
+        }
+
+        #md-root li.task-list-item,
+        #md-root ul.contains-task-list > li {
+            list-style: none;
+            margin-left: -0.5em;
+            padding: 0.32em 0.55em 0.35em 0.45em;
+            border: 1px solid var(--task-border);
+            border-radius: 6px;
+            background: linear-gradient(180deg, var(--task-bg), #1a1510);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
+        }
+
+        #md-root li.task-list-item + li.task-list-item,
+        #md-root ul.contains-task-list > li + li {
+            margin-top: 0.42em;
+        }
+
+        #md-root li.task-list-item:has(> input[type="checkbox"]:checked),
+        #md-root ul.contains-task-list > li:has(> input[type="checkbox"]:checked) {
+            border-color: #6a5038;
+            background: linear-gradient(180deg, rgba(80, 60, 40, 0.9), var(--accent-soft));
+            color: var(--task-done);
+        }
+
+        .warning {
+            margin-top: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--warn-border);
+            background: var(--warn-bg);
+            color: var(--warn-text);
+            padding: 8px 10px;
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .shell {
+                padding: 10px;
             }
 
-            const normalizedPath = normalizeLocalAssetPath(rawSrc);
-            if (!normalizedPath) {
-              continue;
+            #preview-root {
+                padding: 16px 14px;
+                border-radius: 6px;
+                min-height: calc(100vh - 80px);
             }
+        }
+        </style>
+    </head>
+    <body>
+        <main class="shell">
+            <header class="preview-header">
+                <p id="filename-line" class="filename-line">buffer</p>
+                <p id="status-line" class="status-line">Connecting...</p>
+            </header>
+            <section id="preview-root">
+                <article id="md-root">
+                    <p data-line="1">Waiting for snapshot...</p>
+                </article>
+            </section>
+            <section id="warning" class="warning"></section>
+        </main>
 
-            if (!currentBufnr) {
-              continue;
-            }
+        <script>
+        (() => {
+            const AUTO_SCROLL = __AUTO_SCROLL__;
+            const COMFORT_TOP = Number("__SCROLL_TOP__");
+            const COMFORT_BOTTOM = Number("__SCROLL_BOTTOM__");
+            const FOLLOW_RATIO = Math.max(0.05, Math.min(0.95, (COMFORT_TOP + COMFORT_BOTTOM) / 2));
 
-            const params = new URLSearchParams({
-              buf: currentBufnr,
-              path: normalizedPath,
+            const statusLine = document.getElementById("status-line");
+            const filenameLine = document.getElementById("filename-line");
+            const warning = document.getElementById("warning");
+            const previewRoot = document.getElementById("preview-root");
+
+            let currentArticle = document.getElementById("md-root");
+            let lineAnchors = [];
+            let latestCursorLine = null;
+            let activeLineElement = null;
+            let manualScrollCooldownUntil = 0;
+            let source = null;
+            let followTargetTop = null;
+            let followVelocity = 0;
+            let followFrame = 0;
+            let followLastTs = 0;
+            let activePollTimer = null;
+            let pendingRenderPayload = null;
+            let pendingRenderFrame = 0;
+
+            const syntaxSignatureByCode = new WeakMap();
+
+            const search = new URLSearchParams(window.location.search);
+            const initialBufnr = (search.get("buf") || "").trim();
+            let currentBufnr = initialBufnr || null;
+
+            const LANGUAGE_ALIASES = Object.freeze({
+                rs: "rust",
+                js: "javascript",
+                jsx: "javascript",
+                mjs: "javascript",
+                cjs: "javascript",
+                ts: "typescript",
+                tsx: "typescript",
+                py: "python",
+                sh: "shell",
+                bash: "shell",
+                shellsession: "shell",
+                "shell-session": "shell",
+                console: "shell",
+                zsh: "shell",
+                fish: "shell",
+                cxx: "cpp",
+                cc: "cpp",
+                "c++": "cpp",
+                hpp: "cpp",
+                hxx: "cpp",
+                yml: "yaml",
+                jsonc: "javascript",
+                psql: "sql",
+                mysql: "sql",
+                plsql: "sql",
+                postgresql: "sql",
+                sqlite: "sql",
+                plain: "plain",
+                plaintext: "plain",
+                md: "markdown",
+                mkd: "markdown",
+                mdown: "markdown",
+                txt: "plain",
+                text: "plain"
             });
-            image.setAttribute("src", `/asset?${params.toString()}`);
-          }
-        }
 
-        function escapeHtml(value) {
-          return value
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-            .replaceAll('"', "&quot;")
-            .replaceAll("'", "&#39;");
-        }
+            const KEYWORDS_BY_LANGUAGE = Object.freeze({
+                rust: ["as", "async", "await", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while"],
+                javascript: ["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import", "in", "instanceof", "let", "new", "null", "of", "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "yield"],
+                typescript: ["abstract", "any", "as", "async", "await", "break", "case", "catch", "class", "const", "continue", "declare", "default", "do", "else", "enum", "export", "extends", "false", "finally", "for", "from", "function", "if", "implements", "import", "in", "infer", "interface", "is", "keyof", "let", "module", "namespace", "never", "new", "null", "readonly", "return", "satisfies", "static", "super", "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var", "void", "while"],
+                python: ["and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"],
+                shell: ["case", "do", "done", "elif", "else", "esac", "export", "fi", "for", "function", "if", "in", "local", "readonly", "return", "select", "then", "until", "while"],
+                go: ["break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "if", "import", "interface", "map", "package", "range", "return", "select", "struct", "switch", "type", "var"],
+                c: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"],
+                cpp: ["alignas", "alignof", "auto", "bool", "break", "case", "catch", "char", "class", "const", "constexpr", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "nullptr", "operator", "private", "protected", "public", "return", "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw", "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "while"],
+                java: ["abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "false", "final", "finally", "float", "for", "if", "implements", "import", "instanceof", "int", "interface", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "void", "volatile", "while"],
+                ruby: ["BEGIN", "END", "alias", "and", "begin", "break", "case", "class", "def", "defined?", "do", "else", "elsif", "end", "ensure", "false", "for", "if", "in", "module", "next", "nil", "not", "or", "redo", "rescue", "retry", "return", "self", "super", "then", "true", "undef", "unless", "until", "when", "while", "yield"],
+                sql: [ "all", "and", "as", "asc", "between", "by", "case", "create", "delete", "desc", "distinct", "drop", "else", "end", "exists", "from", "group", "having", "in", "inner", "insert", "into", "is", "join", "left", "limit", "not", "null", "on", "or", "order", "outer", "right", "select", "set", "table", "then", "union", "update", "values", "when", "where", "rownum", "rowid", "start", "with", "connect", "prior", "level", "minus", "intersect", "dual", "sysdate", "systimestamp", "nvl", "nvl2", "decode", "to_char", "to_date", "to_number", "trunc", "add_months", "months_between", "merge", "flashback", "purge", "comment", "constraint", "primary", "foreign", "references", "check", "unique", "sequence", "trigger", "view", "materialized", "declare", "begin", "exception", "elsif", "loop", "while", "for", "exit", "continue", "procedure", "function", "return", "package", "body", "cursor", "open", "fetch", "close", "bulk", "collect", "forall", "record", "type", "rowtype", "constant", "pragma", "raise", "commit", "rollback", "savepoint", "execute", "immediate", "dbms_output" ]
+            });
 
-        function escapeRegex(value) {
-          return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        }
+            const C_STYLE_LANGUAGES = new Set(["rust", "javascript", "typescript", "go", "c", "cpp", "java", "sql"]);
+            const HASH_COMMENT_LANGUAGES = new Set(["python", "shell", "ruby", "yaml", "toml", "markdown"]);
+            const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
+            const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
 
-        function hashText(value) {
-          let hash = 2166136261;
-          for (let index = 0; index < value.length; index += 1) {
-            hash ^= value.charCodeAt(index);
-            hash = Math.imul(hash, 16777619);
-          }
-          return (hash >>> 0).toString(36);
-        }
-
-        function normalizeLanguage(raw) {
-          if (!raw) {
-            return "plain";
-          }
-
-          const lowered = raw.toLowerCase().trim();
-          return LANGUAGE_ALIASES[lowered] || lowered;
-        }
-
-        function languageFromClassName(className) {
-          if (!className) {
-            return null;
-          }
-
-          if (className.startsWith("language-")) {
-            return normalizeLanguage(className.slice("language-".length));
-          }
-
-          if (className.startsWith("lang-")) {
-            return normalizeLanguage(className.slice("lang-".length));
-          }
-
-          if (className.startsWith("source-")) {
-            return normalizeLanguage(className.slice("source-".length));
-          }
-
-          if (className in LANGUAGE_ALIASES || className in KEYWORDS_BY_LANGUAGE) {
-            return normalizeLanguage(className);
-          }
-
-          return null;
-        }
-
-        function languageFromCodeElement(codeElement) {
-          for (const className of codeElement.classList) {
-            const detected = languageFromClassName(className);
-            if (detected) {
-              return detected;
-            }
-          }
-
-          const pre = codeElement.parentElement;
-          if (pre && pre.tagName === "PRE") {
-            const dataLang = pre.getAttribute("data-lang");
-            const normalized = normalizeLanguage(dataLang || "");
-            if (normalized !== "plain") {
-              return normalized;
+            function setStatus(message) {
+                statusLine.textContent = message;
             }
 
-            for (const className of pre.classList) {
-              const detected = languageFromClassName(className);
-              if (detected) {
-                return detected;
-              }
-            }
-          }
-
-          return "plain";
-        }
-
-        function keywordRegexFor(language) {
-          const words = KEYWORDS_BY_LANGUAGE[language];
-          if (!words || words.length === 0) {
-            return null;
-          }
-
-          const pattern = words.map((word) => escapeRegex(word)).join("|");
-          const flags = CASE_INSENSITIVE_KEYWORD_LANGUAGES.has(language) ? "gi" : "g";
-          return new RegExp(`\\b(?:${pattern})\\b`, flags);
-        }
-
-        function patternsForLanguage(language) {
-          const patterns = [];
-
-          if (C_STYLE_LANGUAGES.has(language)) {
-            patterns.push({ regex: /\/\*[\s\S]*?\*\//g, kind: "comment" });
-            patterns.push({ regex: /\/\/[^\n]*/g, kind: "comment" });
-          }
-
-          if (HASH_COMMENT_LANGUAGES.has(language)) {
-            patterns.push({ regex: /#[^\n]*/g, kind: "comment" });
-          }
-
-          if (DASH_COMMENT_LANGUAGES.has(language)) {
-            patterns.push({ regex: /--[^\n]*/g, kind: "comment" });
-          }
-
-          if (language === "json") {
-            patterns.push({ regex: /"(?:\\.|[^"\\])*"(?=\s*:)/g, kind: "property" });
-          }
-
-          patterns.push({ regex: /`(?:\\.|[^`])*`/g, kind: "string" });
-          patterns.push({ regex: /"(?:\\.|[^"\\])*"/g, kind: "string" });
-          patterns.push({ regex: /'(?:\\.|[^'\\])*'/g, kind: "string" });
-
-          if (language === "shell") {
-            patterns.push({ regex: /\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g, kind: "variable" });
-          }
-
-          const keywordRegex = keywordRegexFor(language);
-          if (keywordRegex) {
-            patterns.push({ regex: keywordRegex, kind: "keyword" });
-          }
-
-          patterns.push({ regex: /\b(?:true|false|null|None|Some|Ok|Err)\b/g, kind: "constant" });
-          patterns.push({ regex: /\b(?:0x[a-fA-F0-9]+|0b[01]+|0o[0-7]+|\d+(?:\.\d+)?(?:e[+\-]?\d+)?)\b/gi, kind: "number" });
-          patterns.push({ regex: /\b[A-Za-z_][A-Za-z0-9_]*\s*(?=\()/g, kind: "function" });
-
-          return patterns;
-        }
-
-        function highlightSource(text, language) {
-          const patterns = patternsForLanguage(language);
-          if (patterns.length === 0) {
-            return escapeHtml(text);
-          }
-
-          let output = "";
-          let index = 0;
-
-          while (index < text.length) {
-            let winner = null;
-
-            for (const pattern of patterns) {
-              pattern.regex.lastIndex = index;
-              const match = pattern.regex.exec(text);
-              if (!match || match[0].length === 0) {
-                continue;
-              }
-
-              if (
-                winner === null ||
-                match.index < winner.match.index ||
-                (match.index === winner.match.index && match[0].length > winner.match[0].length)
-              ) {
-                winner = { pattern, match };
-              }
-            }
-
-            if (!winner) {
-              output += escapeHtml(text.slice(index));
-              break;
-            }
-
-            if (winner.match.index > index) {
-              output += escapeHtml(text.slice(index, winner.match.index));
-            }
-
-            const tokenValue = winner.match[0];
-            output += `<span class="tok-${winner.pattern.kind}">${escapeHtml(tokenValue)}</span>`;
-            index = winner.match.index + tokenValue.length;
-          }
-
-          return output;
-        }
-
-        function applySyntaxHighlighting(root) {
-          const MAX_BLOCK_CHARS = 120000;
-          const blocks = root.querySelectorAll("pre code");
-          for (const codeElement of blocks) {
-            const raw = codeElement.textContent || "";
-            if (raw.length > MAX_BLOCK_CHARS) {
-              continue;
-            }
-
-            const language = languageFromCodeElement(codeElement);
-            const signature = hashText(`${language}\u0000${raw}`);
-            const previousSignature = syntaxSignatureByCode.get(codeElement);
-            if (previousSignature !== signature) {
-              const highlighted = highlightSource(raw, language);
-              codeElement.innerHTML = highlighted;
-              syntaxSignatureByCode.set(codeElement, signature);
-            }
-
-            const pre = codeElement.parentElement;
-            if (pre && pre.tagName === "PRE") {
-              if (language !== "plain") {
-                pre.setAttribute("data-lang", language);
-              } else {
-                pre.removeAttribute("data-lang");
-              }
-            }
-          }
-
-          const inlineCodes = root.querySelectorAll(":not(pre) > code");
-          for (const inlineCode of inlineCodes) {
-            const raw = inlineCode.textContent || "";
-            if (raw.length > 260) {
-              continue;
-            }
-            const signature = hashText(`plain\u0000${raw}`);
-            const previousSignature = syntaxSignatureByCode.get(inlineCode);
-            if (previousSignature !== signature) {
-              inlineCode.innerHTML = highlightSource(raw, "plain");
-              syntaxSignatureByCode.set(inlineCode, signature);
-            }
-          }
-        }
-
-        function updateAnchors() {
-          lineAnchors = [];
-          const candidates = currentArticle.querySelectorAll("[data-line]");
-          for (const element of candidates) {
-            const line = Number(element.getAttribute("data-line"));
-            if (!Number.isNaN(line)) {
-              lineAnchors.push({ line, element });
-            }
-          }
-          lineAnchors.sort((a, b) => a.line - b.line);
-        }
-
-        function setActiveLine(line) {
-          const target = findClosestAnchor(line);
-
-          if (activeLineElement && activeLineElement !== target) {
-            activeLineElement.classList.remove("is-cursor-line");
-          }
-
-          activeLineElement = target;
-
-          if (activeLineElement) {
-            activeLineElement.classList.add("is-cursor-line");
-          }
-
-          return target;
-        }
-
-        function getScrollTop() {
-          return window.scrollY || document.documentElement.scrollTop || 0;
-        }
-
-        function getMaxScrollTop() {
-          return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-        }
-
-        function clampScrollTop(value) {
-          return Math.max(0, Math.min(getMaxScrollTop(), value));
-        }
-
-        function stopFollowAnimation() {
-          if (followFrame !== 0) {
-            window.cancelAnimationFrame(followFrame);
-            followFrame = 0;
-          }
-          followLastTs = 0;
-          followVelocity = 0;
-        }
-
-        function stepFollow(ts) {
-          if (followTargetTop == null) {
-            stopFollowAnimation();
-            return;
-          }
-
-          if (followLastTs === 0) {
-            followLastTs = ts;
-          }
-
-          const dt = Math.max(1 / 120, Math.min(1 / 20, (ts - followLastTs) / 1000));
-          followLastTs = ts;
-
-          const currentTop = getScrollTop();
-          const targetTop = clampScrollTop(followTargetTop);
-          const distance = targetTop - currentTop;
-
-          const distanceAbs = Math.abs(distance);
-          const t = Math.min(1, distanceAbs / 1200);
-          const responsiveness = 8 + 10 * t;
-          const maxSpeed = 22200 + 7800 * t * t;
-          const alpha = 1 - Math.exp(-responsiveness * dt);
-          const unclampedStep = distance * alpha;
-          const maxStep = maxSpeed * dt;
-          const step = Math.max(-maxStep, Math.min(maxStep, unclampedStep));
-          const nextTop = clampScrollTop(currentTop + step);
-
-          followVelocity = step / dt;
-
-          window.scrollTo({ top: nextTop, behavior: "auto" });
-
-          if (Math.abs(distance) < 0.6) {
-            window.scrollTo({ top: targetTop, behavior: "auto" });
-            stopFollowAnimation();
-            return;
-          }
-
-          followFrame = window.requestAnimationFrame(stepFollow);
-        }
-
-        function animateToScrollTop(targetTop, force) {
-          const clampedTarget = clampScrollTop(targetTop);
-
-          if (force) {
-            followTargetTop = clampedTarget;
-            stopFollowAnimation();
-            window.scrollTo({ top: clampedTarget, behavior: "auto" });
-            return;
-          }
-
-          followTargetTop = clampedTarget;
-          if (followFrame === 0) {
-            followFrame = window.requestAnimationFrame(stepFollow);
-          }
-        }
-
-        function targetTopForElement(target) {
-          const viewport = window.innerHeight || document.documentElement.clientHeight;
-          const absoluteTop = getScrollTop() + target.getBoundingClientRect().top;
-          return absoluteTop - viewport * FOLLOW_RATIO;
-        }
-
-        function targetTopByLineRatio(line) {
-          if (!lineAnchors.length) {
-            return getScrollTop();
-          }
-
-          const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
-          const ratio = Math.max(0, Math.min(1, line / maxLine));
-          return getMaxScrollTop() * ratio;
-        }
-
-        function isClientOwnedAttribute(name) {
-          return name === "data-lang";
-        }
-
-        function syncElementAttributes(currentElement, nextElement) {
-          const currentAttributes = Array.from(currentElement.attributes);
-          for (const attr of currentAttributes) {
-            if (isClientOwnedAttribute(attr.name)) {
-              continue;
-            }
-            if (!nextElement.hasAttribute(attr.name)) {
-              currentElement.removeAttribute(attr.name);
-            }
-          }
-
-          for (const attr of nextElement.attributes) {
-            if (currentElement.getAttribute(attr.name) !== attr.value) {
-              currentElement.setAttribute(attr.name, attr.value);
-            }
-          }
-        }
-
-        function nodeLineKey(node) {
-          if (node.nodeType !== Node.ELEMENT_NODE) {
-            return null;
-          }
-
-          return node.getAttribute("data-line");
-        }
-
-        function areCompatibleNodes(currentNode, nextNode) {
-          if (currentNode.nodeType !== nextNode.nodeType) {
-            return false;
-          }
-
-          if (currentNode.nodeType !== Node.ELEMENT_NODE) {
-            return true;
-          }
-
-          if (currentNode.tagName !== nextNode.tagName) {
-            return false;
-          }
-
-          const currentId = currentNode.getAttribute("id");
-          const nextId = nextNode.getAttribute("id");
-          if (currentId || nextId) {
-            return currentId === nextId;
-          }
-
-          const currentLine = nodeLineKey(currentNode);
-          const nextLine = nodeLineKey(nextNode);
-          if (currentLine || nextLine) {
-            return currentLine === nextLine;
-          }
-
-          return true;
-        }
-
-        function morphNode(currentNode, nextNode) {
-          if (!areCompatibleNodes(currentNode, nextNode)) {
-            const replacement = nextNode.cloneNode(true);
-            currentNode.replaceWith(replacement);
-            return replacement;
-          }
-
-          if (
-            currentNode.nodeType === Node.TEXT_NODE ||
-            currentNode.nodeType === Node.CDATA_SECTION_NODE ||
-            currentNode.nodeType === Node.COMMENT_NODE
-          ) {
-            if (currentNode.textContent !== nextNode.textContent) {
-              currentNode.textContent = nextNode.textContent;
-            }
-            return currentNode;
-          }
-
-          return morphElement(currentNode, nextNode);
-        }
-
-        function morphChildren(currentElement, nextElement) {
-          let currentChild = currentElement.firstChild;
-          let nextChild = nextElement.firstChild;
-
-          while (nextChild) {
-            if (!currentChild) {
-              currentElement.appendChild(nextChild.cloneNode(true));
-              nextChild = nextChild.nextSibling;
-              continue;
-            }
-
-            if (areCompatibleNodes(currentChild, nextChild)) {
-              const currentNextSibling = currentChild.nextSibling;
-              morphNode(currentChild, nextChild);
-              currentChild = currentNextSibling;
-              nextChild = nextChild.nextSibling;
-              continue;
-            }
-
-            const nextSiblingCandidate = nextChild.nextSibling;
-            if (nextSiblingCandidate && areCompatibleNodes(currentChild, nextSiblingCandidate)) {
-              currentElement.insertBefore(nextChild.cloneNode(true), currentChild);
-              nextChild = nextSiblingCandidate;
-              continue;
-            }
-
-            const currentSiblingCandidate = currentChild.nextSibling;
-            if (
-              currentSiblingCandidate &&
-              areCompatibleNodes(currentSiblingCandidate, nextChild)
-            ) {
-              currentElement.removeChild(currentChild);
-              currentChild = currentSiblingCandidate;
-              continue;
-            }
-
-            const replacement = nextChild.cloneNode(true);
-            const currentNextSibling = currentChild.nextSibling;
-            currentElement.replaceChild(replacement, currentChild);
-            currentChild = currentNextSibling;
-            nextChild = nextChild.nextSibling;
-          }
-
-          while (currentChild) {
-            const currentNextSibling = currentChild.nextSibling;
-            currentElement.removeChild(currentChild);
-            currentChild = currentNextSibling;
-          }
-        }
-
-        function morphElement(currentElement, nextElement) {
-          if (currentElement.tagName !== nextElement.tagName) {
-            const replacement = nextElement.cloneNode(true);
-            currentElement.replaceWith(replacement);
-            return replacement;
-          }
-
-          syncElementAttributes(currentElement, nextElement);
-
-          if (currentElement.tagName === "CODE") {
-            const currentText = currentElement.textContent || "";
-            const nextText = nextElement.textContent || "";
-            if (currentText !== nextText) {
-              currentElement.textContent = nextText;
-              syntaxSignatureByCode.delete(currentElement);
-            }
-            return currentElement;
-          }
-
-          morphChildren(currentElement, nextElement);
-          return currentElement;
-        }
-
-        function parseIncomingArticle(html) {
-          const template = document.createElement("template");
-          template.innerHTML = html;
-
-          const parsedArticle = template.content.querySelector("#md-root");
-          if (parsedArticle) {
-            return parsedArticle;
-          }
-
-          const fallbackArticle = document.createElement("article");
-          fallbackArticle.setAttribute("id", "md-root");
-          while (template.content.firstChild) {
-            fallbackArticle.appendChild(template.content.firstChild);
-          }
-          return fallbackArticle;
-        }
-
-        function installHtml(html) {
-          const incomingArticle = parseIncomingArticle(html);
-          rewriteLocalImageSources(incomingArticle);
-
-          const mountedArticle = previewRoot.querySelector("#md-root");
-          if (mountedArticle) {
-            currentArticle = morphElement(mountedArticle, incomingArticle);
-          } else {
-            const nextArticle = incomingArticle.cloneNode(true);
-            previewRoot.replaceChildren(nextArticle);
-            currentArticle = nextArticle;
-          }
-
-          applySyntaxHighlighting(currentArticle);
-          updateAnchors();
-
-          if (latestCursorLine != null) {
-            setActiveLine(latestCursorLine);
-          }
-        }
-
-        function clearPendingRender() {
-          if (pendingRenderFrame !== 0) {
-            window.cancelAnimationFrame(pendingRenderFrame);
-            pendingRenderFrame = 0;
-          }
-          pendingRenderPayload = null;
-        }
-
-        function applyRenderPayload(payload) {
-          clearWarning();
-          installHtml(payload.html || "<article id=\"md-root\"></article>");
-          followCursorLine(payload.cursor_line, false, true);
-          setStatus("Live");
-        }
-
-        function queueRenderPayload(payload) {
-          pendingRenderPayload = payload;
-          if (pendingRenderFrame !== 0) {
-            return;
-          }
-
-          pendingRenderFrame = window.requestAnimationFrame(() => {
-            pendingRenderFrame = 0;
-            const latestPayload = pendingRenderPayload;
-            pendingRenderPayload = null;
-            if (!latestPayload) {
-              return;
-            }
-
-            applyRenderPayload(latestPayload);
-          });
-        }
-
-        function findClosestAnchor(line) {
-          if (!lineAnchors.length) {
-            return null;
-          }
-
-          let lower = null;
-          let higher = null;
-          for (const anchor of lineAnchors) {
-            if (anchor.line === line) {
-              return anchor.element;
-            }
-            if (anchor.line < line) {
-              lower = anchor;
-              continue;
-            }
-            higher = anchor;
-            break;
-          }
-
-          if (lower) {
-            return lower.element;
-          }
-          if (higher) {
-            return higher.element;
-          }
-
-          return lineAnchors[0].element;
-        }
-
-        function followCursorLine(line, force, allowDuplicate) {
-          if (!line) {
-            return;
-          }
-
-          if (!force && !allowDuplicate && latestCursorLine === line) {
-            return;
-          }
-
-          latestCursorLine = line;
-          const target = setActiveLine(line);
-
-          if (!AUTO_SCROLL) {
-            return;
-          }
-
-          if (!force && performance.now() < manualScrollCooldownUntil) {
-            return;
-          }
-
-          let targetTop;
-          if (!target) {
-            targetTop = targetTopByLineRatio(line);
-          } else {
-            targetTop = targetTopForElement(target);
-          }
-
-          animateToScrollTop(targetTop, force);
-        }
-
-        function readPayload(event) {
-          try {
-            return JSON.parse(event.data);
-          } catch (_error) {
-            return null;
-          }
-        }
-
-        let filename = "buffer";
-
-        async function loadSnapshot(targetBufnr = currentBufnr) {
-          const resolvedBufnr = targetBufnr == null ? await getActiveBufnr() : String(targetBufnr);
-          if (!resolvedBufnr) {
-            throw new Error("snapshot_no_active_session");
-          }
-
-          const response = await fetch(`/snapshot?buf=${encodeURIComponent(resolvedBufnr)}`);
-          if (!response.ok) {
-            throw new Error(`snapshot_http_${response.status}`);
-          }
-
-          const payload = await response.json();
-          currentBufnr = String(payload.bufnr || resolvedBufnr);
-          filename = payload.filename || "buffer";
-          setFilename(filename);
-          clearPendingRender();
-          installHtml(payload.html || "<article id=\"md-root\"></article>");
-          followCursorLine(payload.cursor_line, true, true);
-          setStatus("Connected");
-        }
-
-        function connectEvents() {
-          if (!currentBufnr) {
-            return;
-          }
-
-          if (source) {
-            source.close();
-          }
-
-          source = new EventSource(`/events?buf=${encodeURIComponent(currentBufnr)}`);
-
-          source.addEventListener("render_full", (event) => {
-            const payload = readPayload(event);
-            if (!payload) {
-              return;
-            }
-
-            queueRenderPayload(payload);
-          });
-
-          source.addEventListener("cursor_move", (event) => {
-            const payload = readPayload(event);
-            if (!payload) {
-              return;
-            }
-            followCursorLine(payload.line, false, false);
-          });
-
-          source.addEventListener("session_end", (event) => {
-            const payload = readPayload(event);
-            const reason = payload && payload.reason ? payload.reason : "stopped";
-            clearPendingRender();
-            showWarning(`Session ended: ${reason}`);
-            setStatus("Session ended");
-            if (source) {
-              source.close();
-              source = null;
-            }
-          });
-
-          source.addEventListener("heartbeat", () => {
-            setStatus("Live");
-          });
-
-          source.onerror = () => {
-            clearPendingRender();
-            if (source) {
-              source.close();
-              source = null;
-            }
-
-            setStatus("Disconnected - reconnecting...");
-            setTimeout(async () => {
-              try {
-                await pollActiveBuffer();
-                if (source) {
-                  return;
+            function filenameFromPath(value) {
+                const trimmed = (value || "").trim();
+                if (!trimmed) {
+                    return "buffer";
                 }
 
-                await loadSnapshot();
+                const normalized = trimmed.replaceAll("\\", "/");
+                const parts = normalized.split("/").filter(Boolean);
+                return parts[parts.length - 1] || trimmed;
+            }
+
+            function setFilename(value) {
+                const label = filenameFromPath(value);
+                filenameLine.textContent = label;
+                document.title = label + " - Markdown Preview";
+            }
+
+            function showWarning(message) {
+                warning.style.display = "block";
+                warning.textContent = message;
+            }
+
+            function clearWarning() {
+                warning.style.display = "none";
+                warning.textContent = "";
+            }
+
+            async function getActiveBufnr() {
+                let response;
+                try {
+                    response = await fetch("/active", { cache: "no-store" });
+                } catch (_error) {
+                    return null;
+                }
+
+                if (!response.ok) {
+                    return null;
+                }
+
+                let payload;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    return null;
+                }
+
+                if (!payload || payload.bufnr == null) {
+                    return null;
+                }
+
+                return String(payload.bufnr);
+            }
+
+            function hasUrlScheme(value) {
+                if (/^[a-zA-Z]:[\\/]/.test(value)) {
+                    return false;
+                }
+                return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value);
+            }
+
+            function normalizeLocalAssetPath(raw) {
+                let value = raw.trim();
+                if (!value) {
+                    return null;
+                }
+
+                if (value.startsWith("//") || value.startsWith("#")) {
+                    return null;
+                }
+
+                const lower = value.toLowerCase();
+                if (hasUrlScheme(value) && !lower.startsWith("file://")) {
+                    return null;
+                }
+
+                if (lower.startsWith("file://")) {
+                    value = value.slice(7);
+                }
+
+                const queryIdx = value.indexOf("?");
+                if (queryIdx >= 0) {
+                    value = value.slice(0, queryIdx);
+                }
+
+                const hashIdx = value.indexOf("#");
+                if (hashIdx >= 0) {
+                    value = value.slice(0, hashIdx);
+                }
+
+                if (!value) {
+                    return null;
+                }
+
+                try {
+                    value = decodeURIComponent(value);
+                } catch (_error) {
+                    // Keep the original value when decoding fails.
+                }
+
+                return value;
+            }
+
+            function rewriteLocalImageSources(root) {
+                const images = root.querySelectorAll("img[src]");
+                for (const image of images) {
+                    const rawSrc = image.getAttribute("src");
+                    if (!rawSrc) {
+                        continue;
+                    }
+
+                    const normalizedPath = normalizeLocalAssetPath(rawSrc);
+                    if (!normalizedPath) {
+                        continue;
+                    }
+
+                    if (!currentBufnr) {
+                        continue;
+                    }
+
+                    const params = new URLSearchParams({
+                        buf: currentBufnr,
+                        path: normalizedPath,
+                    });
+                    image.setAttribute("src", `/asset?${params.toString()}`);
+                }
+            }
+
+            function escapeHtml(value) {
+                return value
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#39;");
+            }
+
+            function escapeRegex(value) {
+                return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function hashText(value) {
+                let hash = 2166136261;
+                for (let index = 0; index < value.length; index += 1) {
+                    hash ^= value.charCodeAt(index);
+                    hash = Math.imul(hash, 16777619);
+                }
+                return (hash >>> 0).toString(36);
+            }
+
+            function normalizeLanguage(raw) {
+                if (!raw) {
+                    return "plain";
+                }
+
+                const lowered = raw.toLowerCase().trim();
+                return LANGUAGE_ALIASES[lowered] || lowered;
+            }
+
+            function languageFromClassName(className) {
+                if (!className) {
+                    return null;
+                }
+
+                if (className.startsWith("language-")) {
+                    return normalizeLanguage(className.slice("language-".length));
+                }
+
+                if (className.startsWith("lang-")) {
+                    return normalizeLanguage(className.slice("lang-".length));
+                }
+
+                if (className.startsWith("source-")) {
+                    return normalizeLanguage(className.slice("source-".length));
+                }
+
+                if (className in LANGUAGE_ALIASES || className in KEYWORDS_BY_LANGUAGE) {
+                    return normalizeLanguage(className);
+                }
+
+                return null;
+            }
+
+            function languageFromCodeElement(codeElement) {
+                for (const className of codeElement.classList) {
+                    const detected = languageFromClassName(className);
+                    if (detected) {
+                        return detected;
+                    }
+                }
+
+                const pre = codeElement.parentElement;
+                if (pre && pre.tagName === "PRE") {
+                    const dataLang = pre.getAttribute("data-lang");
+                    const normalized = normalizeLanguage(dataLang || "");
+                    if (normalized !== "plain") {
+                        return normalized;
+                    }
+
+                    for (const className of pre.classList) {
+                        const detected = languageFromClassName(className);
+                        if (detected) {
+                            return detected;
+                        }
+                    }
+                }
+
+                return "plain";
+            }
+
+            function keywordRegexFor(language) {
+                const words = KEYWORDS_BY_LANGUAGE[language];
+                if (!words || words.length === 0) {
+                    return null;
+                }
+
+                const pattern = words.map((word) => escapeRegex(word)).join("|");
+                const flags = CASE_INSENSITIVE_KEYWORD_LANGUAGES.has(language) ? "gi" : "g";
+                return new RegExp(`\\b(?:${pattern})\\b`, flags);
+            }
+
+            function patternsForLanguage(language) {
+                const patterns = [];
+
+                if (C_STYLE_LANGUAGES.has(language)) {
+                    patterns.push({ regex: /\/\*[\s\S]*?\*\//g, kind: "comment" });
+                    patterns.push({ regex: /\/\/[^\n]*/g, kind: "comment" });
+                }
+
+                if (HASH_COMMENT_LANGUAGES.has(language)) {
+                    patterns.push({ regex: /#[^\n]*/g, kind: "comment" });
+                }
+
+                if (DASH_COMMENT_LANGUAGES.has(language)) {
+                    patterns.push({ regex: /--[^\n]*/g, kind: "comment" });
+                }
+
+                if (language === "json") {
+                    patterns.push({ regex: /"(?:\\.|[^"\\])*"(?=\s*:)/g, kind: "property" });
+                }
+
+                patterns.push({ regex: /`(?:\\.|[^`])*`/g, kind: "string" });
+                patterns.push({ regex: /"(?:\\.|[^"\\])*"/g, kind: "string" });
+                patterns.push({ regex: /'(?:\\.|[^'\\])*'/g, kind: "string" });
+
+                if (language === "shell") {
+                    patterns.push({ regex: /\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g, kind: "variable" });
+                }
+
+                const keywordRegex = keywordRegexFor(language);
+                if (keywordRegex) {
+                    patterns.push({ regex: keywordRegex, kind: "keyword" });
+                }
+
+                patterns.push({ regex: /\b(?:true|false|null|None|Some|Ok|Err)\b/g, kind: "constant" });
+                patterns.push({ regex: /\b(?:0x[a-fA-F0-9]+|0b[01]+|0o[0-7]+|\d+(?:\.\d+)?(?:e[+\-]?\d+)?)\b/gi, kind: "number" });
+                patterns.push({ regex: /\b[A-Za-z_][A-Za-z0-9_]*\s*(?=\()/g, kind: "function" });
+
+                return patterns;
+            }
+
+            function highlightSource(text, language) {
+                const patterns = patternsForLanguage(language);
+                if (patterns.length === 0) {
+                    return escapeHtml(text);
+                }
+
+                let output = "";
+                let index = 0;
+
+                while (index < text.length) {
+                    let winner = null;
+
+                    for (const pattern of patterns) {
+                        pattern.regex.lastIndex = index;
+                        const match = pattern.regex.exec(text);
+                        if (!match || match[0].length === 0) {
+                            continue;
+                        }
+
+                        if (
+                            winner === null ||
+                                match.index < winner.match.index ||
+                                (match.index === winner.match.index && match[0].length > winner.match[0].length)
+                        ) {
+                            winner = { pattern, match };
+                        }
+                    }
+
+                    if (!winner) {
+                        output += escapeHtml(text.slice(index));
+                        break;
+                    }
+
+                    if (winner.match.index > index) {
+                        output += escapeHtml(text.slice(index, winner.match.index));
+                    }
+
+                    const tokenValue = winner.match[0];
+                    output += `<span class="tok-${winner.pattern.kind}">${escapeHtml(tokenValue)}</span>`;
+                    index = winner.match.index + tokenValue.length;
+                }
+
+                return output;
+            }
+
+            function applySyntaxHighlighting(root) {
+                const MAX_BLOCK_CHARS = 120000;
+                const blocks = root.querySelectorAll("pre code");
+                for (const codeElement of blocks) {
+                    const raw = codeElement.textContent || "";
+                    if (raw.length > MAX_BLOCK_CHARS) {
+                        continue;
+                    }
+
+                    const language = languageFromCodeElement(codeElement);
+                    const signature = hashText(`${language}\u0000${raw}`);
+                    const previousSignature = syntaxSignatureByCode.get(codeElement);
+                    if (previousSignature !== signature) {
+                        const highlighted = highlightSource(raw, language);
+                        codeElement.innerHTML = highlighted;
+                        syntaxSignatureByCode.set(codeElement, signature);
+                    }
+
+                    const pre = codeElement.parentElement;
+                    if (pre && pre.tagName === "PRE") {
+                        if (language !== "plain") {
+                            pre.setAttribute("data-lang", language);
+                        } else {
+                            pre.removeAttribute("data-lang");
+                        }
+                    }
+                }
+
+                const inlineCodes = root.querySelectorAll(":not(pre) > code");
+                for (const inlineCode of inlineCodes) {
+                    const raw = inlineCode.textContent || "";
+                    if (raw.length > 260) {
+                        continue;
+                    }
+                    const signature = hashText(`plain\u0000${raw}`);
+                    const previousSignature = syntaxSignatureByCode.get(inlineCode);
+                    if (previousSignature !== signature) {
+                        inlineCode.innerHTML = highlightSource(raw, "plain");
+                        syntaxSignatureByCode.set(inlineCode, signature);
+                    }
+                }
+            }
+
+            function updateAnchors() {
+                lineAnchors = [];
+                const candidates = currentArticle.querySelectorAll("[data-line]");
+                for (const element of candidates) {
+                    const line = Number(element.getAttribute("data-line"));
+                    if (!Number.isNaN(line)) {
+                        lineAnchors.push({ line, element });
+                    }
+                }
+                lineAnchors.sort((a, b) => a.line - b.line);
+            }
+
+            function setActiveLine(line) {
+                const target = findClosestAnchor(line);
+
+                if (activeLineElement && activeLineElement !== target) {
+                    activeLineElement.classList.remove("is-cursor-line");
+                }
+
+                activeLineElement = target;
+
+                if (activeLineElement) {
+                    activeLineElement.classList.add("is-cursor-line");
+                }
+
+                return target;
+            }
+
+            function getScrollTop() {
+                return window.scrollY || document.documentElement.scrollTop || 0;
+            }
+
+            function getMaxScrollTop() {
+                return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            }
+
+            function clampScrollTop(value) {
+                return Math.max(0, Math.min(getMaxScrollTop(), value));
+            }
+
+            function stopFollowAnimation() {
+                if (followFrame !== 0) {
+                    window.cancelAnimationFrame(followFrame);
+                    followFrame = 0;
+                }
+                followLastTs = 0;
+                followVelocity = 0;
+            }
+
+            function stepFollow(ts) {
+                if (followTargetTop == null) {
+                    stopFollowAnimation();
+                    return;
+                }
+
+                if (followLastTs === 0) {
+                    followLastTs = ts;
+                }
+
+                const dt = Math.max(1 / 120, Math.min(1 / 20, (ts - followLastTs) / 1000));
+                followLastTs = ts;
+
+                const currentTop = getScrollTop();
+                const targetTop = clampScrollTop(followTargetTop);
+                const distance = targetTop - currentTop;
+
+                const distanceAbs = Math.abs(distance);
+                const t = Math.min(1, distanceAbs / 1200);
+                const responsiveness = 8 + 10 * t;
+                const maxSpeed = 22200 + 7800 * t * t;
+                const alpha = 1 - Math.exp(-responsiveness * dt);
+                const unclampedStep = distance * alpha;
+                const maxStep = maxSpeed * dt;
+                const step = Math.max(-maxStep, Math.min(maxStep, unclampedStep));
+                const nextTop = clampScrollTop(currentTop + step);
+
+                followVelocity = step / dt;
+
+                window.scrollTo({ top: nextTop, behavior: "auto" });
+
+                if (Math.abs(distance) < 0.6) {
+                    window.scrollTo({ top: targetTop, behavior: "auto" });
+                    stopFollowAnimation();
+                    return;
+                }
+
+                followFrame = window.requestAnimationFrame(stepFollow);
+            }
+
+            function animateToScrollTop(targetTop, force) {
+                const clampedTarget = clampScrollTop(targetTop);
+
+                if (force) {
+                    followTargetTop = clampedTarget;
+                    stopFollowAnimation();
+                    window.scrollTo({ top: clampedTarget, behavior: "auto" });
+                    return;
+                }
+
+                followTargetTop = clampedTarget;
+                if (followFrame === 0) {
+                    followFrame = window.requestAnimationFrame(stepFollow);
+                }
+            }
+
+            function targetTopForElement(target) {
+                const viewport = window.innerHeight || document.documentElement.clientHeight;
+                const absoluteTop = getScrollTop() + target.getBoundingClientRect().top;
+                return absoluteTop - viewport * FOLLOW_RATIO;
+            }
+
+            function targetTopByLineRatio(line) {
+                if (!lineAnchors.length) {
+                    return getScrollTop();
+                }
+
+                const maxLine = Math.max(lineAnchors[lineAnchors.length - 1].line, 1);
+                const ratio = Math.max(0, Math.min(1, line / maxLine));
+                return getMaxScrollTop() * ratio;
+            }
+
+            function isClientOwnedAttribute(name) {
+                return name === "data-lang";
+            }
+
+            function syncElementAttributes(currentElement, nextElement) {
+                const currentAttributes = Array.from(currentElement.attributes);
+                for (const attr of currentAttributes) {
+                    if (isClientOwnedAttribute(attr.name)) {
+                        continue;
+                    }
+                    if (!nextElement.hasAttribute(attr.name)) {
+                        currentElement.removeAttribute(attr.name);
+                    }
+                }
+
+                for (const attr of nextElement.attributes) {
+                    if (currentElement.getAttribute(attr.name) !== attr.value) {
+                        currentElement.setAttribute(attr.name, attr.value);
+                    }
+                }
+            }
+
+            function nodeLineKey(node) {
+                if (node.nodeType !== Node.ELEMENT_NODE) {
+                    return null;
+                }
+
+                return node.getAttribute("data-line");
+            }
+
+            function areCompatibleNodes(currentNode, nextNode) {
+                if (currentNode.nodeType !== nextNode.nodeType) {
+                    return false;
+                }
+
+                if (currentNode.nodeType !== Node.ELEMENT_NODE) {
+                    return true;
+                }
+
+                if (currentNode.tagName !== nextNode.tagName) {
+                    return false;
+                }
+
+                const currentId = currentNode.getAttribute("id");
+                const nextId = nextNode.getAttribute("id");
+                if (currentId || nextId) {
+                    return currentId === nextId;
+                }
+
+                const currentLine = nodeLineKey(currentNode);
+                const nextLine = nodeLineKey(nextNode);
+                if (currentLine || nextLine) {
+                    return currentLine === nextLine;
+                }
+
+                return true;
+            }
+
+            function morphNode(currentNode, nextNode) {
+                if (!areCompatibleNodes(currentNode, nextNode)) {
+                    const replacement = nextNode.cloneNode(true);
+                    currentNode.replaceWith(replacement);
+                    return replacement;
+                }
+
+                if (
+                    currentNode.nodeType === Node.TEXT_NODE ||
+                        currentNode.nodeType === Node.CDATA_SECTION_NODE ||
+                        currentNode.nodeType === Node.COMMENT_NODE
+                ) {
+                    if (currentNode.textContent !== nextNode.textContent) {
+                        currentNode.textContent = nextNode.textContent;
+                    }
+                    return currentNode;
+                }
+
+                return morphElement(currentNode, nextNode);
+            }
+
+            function morphChildren(currentElement, nextElement) {
+                let currentChild = currentElement.firstChild;
+                let nextChild = nextElement.firstChild;
+
+                while (nextChild) {
+                    if (!currentChild) {
+                        currentElement.appendChild(nextChild.cloneNode(true));
+                        nextChild = nextChild.nextSibling;
+                        continue;
+                    }
+
+                    if (areCompatibleNodes(currentChild, nextChild)) {
+                        const currentNextSibling = currentChild.nextSibling;
+                        morphNode(currentChild, nextChild);
+                        currentChild = currentNextSibling;
+                        nextChild = nextChild.nextSibling;
+                        continue;
+                    }
+
+                    const nextSiblingCandidate = nextChild.nextSibling;
+                    if (nextSiblingCandidate && areCompatibleNodes(currentChild, nextSiblingCandidate)) {
+                        currentElement.insertBefore(nextChild.cloneNode(true), currentChild);
+                        nextChild = nextSiblingCandidate;
+                        continue;
+                    }
+
+                    const currentSiblingCandidate = currentChild.nextSibling;
+                    if (
+                        currentSiblingCandidate &&
+                            areCompatibleNodes(currentSiblingCandidate, nextChild)
+                    ) {
+                        currentElement.removeChild(currentChild);
+                        currentChild = currentSiblingCandidate;
+                        continue;
+                    }
+
+                    const replacement = nextChild.cloneNode(true);
+                    const currentNextSibling = currentChild.nextSibling;
+                    currentElement.replaceChild(replacement, currentChild);
+                    currentChild = currentNextSibling;
+                    nextChild = nextChild.nextSibling;
+                }
+
+                while (currentChild) {
+                    const currentNextSibling = currentChild.nextSibling;
+                    currentElement.removeChild(currentChild);
+                    currentChild = currentNextSibling;
+                }
+            }
+
+            function morphElement(currentElement, nextElement) {
+                if (currentElement.tagName !== nextElement.tagName) {
+                    const replacement = nextElement.cloneNode(true);
+                    currentElement.replaceWith(replacement);
+                    return replacement;
+                }
+
+                syncElementAttributes(currentElement, nextElement);
+
+                if (currentElement.tagName === "CODE") {
+                    const currentText = currentElement.textContent || "";
+                    const nextText = nextElement.textContent || "";
+                    if (currentText !== nextText) {
+                        currentElement.textContent = nextText;
+                        syntaxSignatureByCode.delete(currentElement);
+                    }
+                    return currentElement;
+                }
+
+                morphChildren(currentElement, nextElement);
+                return currentElement;
+            }
+
+            function parseIncomingArticle(html) {
+                const template = document.createElement("template");
+                template.innerHTML = html;
+
+                const parsedArticle = template.content.querySelector("#md-root");
+                if (parsedArticle) {
+                    return parsedArticle;
+                }
+
+                const fallbackArticle = document.createElement("article");
+                fallbackArticle.setAttribute("id", "md-root");
+                while (template.content.firstChild) {
+                    fallbackArticle.appendChild(template.content.firstChild);
+                }
+                return fallbackArticle;
+            }
+
+            function installHtml(html) {
+                const incomingArticle = parseIncomingArticle(html);
+                rewriteLocalImageSources(incomingArticle);
+
+                const mountedArticle = previewRoot.querySelector("#md-root");
+                if (mountedArticle) {
+                    currentArticle = morphElement(mountedArticle, incomingArticle);
+                } else {
+                    const nextArticle = incomingArticle.cloneNode(true);
+                    previewRoot.replaceChildren(nextArticle);
+                    currentArticle = nextArticle;
+                }
+
+                applySyntaxHighlighting(currentArticle);
+                updateAnchors();
+
+                if (latestCursorLine != null) {
+                    setActiveLine(latestCursorLine);
+                }
+            }
+
+            function clearPendingRender() {
+                if (pendingRenderFrame !== 0) {
+                    window.cancelAnimationFrame(pendingRenderFrame);
+                    pendingRenderFrame = 0;
+                }
+                pendingRenderPayload = null;
+            }
+
+            function applyRenderPayload(payload) {
+                clearWarning();
+                installHtml(payload.html || "<article id=\"md-root\"></article>");
+                followCursorLine(payload.cursor_line, false, true);
+                setStatus("Live");
+            }
+
+            function queueRenderPayload(payload) {
+                pendingRenderPayload = payload;
+                if (pendingRenderFrame !== 0) {
+                    return;
+                }
+
+                pendingRenderFrame = window.requestAnimationFrame(() => {
+                    pendingRenderFrame = 0;
+                    const latestPayload = pendingRenderPayload;
+                    pendingRenderPayload = null;
+                    if (!latestPayload) {
+                        return;
+                    }
+
+                    applyRenderPayload(latestPayload);
+                });
+            }
+
+            function findClosestAnchor(line) {
+                if (!lineAnchors.length) {
+                    return null;
+                }
+
+                let lower = null;
+                let higher = null;
+                for (const anchor of lineAnchors) {
+                    if (anchor.line === line) {
+                        return anchor.element;
+                    }
+                    if (anchor.line < line) {
+                        lower = anchor;
+                        continue;
+                    }
+                    higher = anchor;
+                    break;
+                }
+
+                if (lower) {
+                    return lower.element;
+                }
+                if (higher) {
+                    return higher.element;
+                }
+
+                return lineAnchors[0].element;
+            }
+
+            function followCursorLine(line, force, allowDuplicate) {
+                if (!line) {
+                    return;
+                }
+
+                if (!force && !allowDuplicate && latestCursorLine === line) {
+                    return;
+                }
+
+                latestCursorLine = line;
+                const target = setActiveLine(line);
+
+                if (!AUTO_SCROLL) {
+                    return;
+                }
+
+                if (!force && performance.now() < manualScrollCooldownUntil) {
+                    return;
+                }
+
+                let targetTop;
+                if (!target) {
+                    targetTop = targetTopByLineRatio(line);
+                } else {
+                    targetTop = targetTopForElement(target);
+                }
+
+                animateToScrollTop(targetTop, force);
+            }
+
+            function readPayload(event) {
+                try {
+                    return JSON.parse(event.data);
+                } catch (_error) {
+                    return null;
+                }
+            }
+
+            let filename = "buffer";
+
+            async function loadSnapshot(targetBufnr = currentBufnr) {
+                const resolvedBufnr = targetBufnr == null ? await getActiveBufnr() : String(targetBufnr);
+                if (!resolvedBufnr) {
+                    throw new Error("snapshot_no_active_session");
+                }
+
+                const response = await fetch(`/snapshot?buf=${encodeURIComponent(resolvedBufnr)}`);
+                if (!response.ok) {
+                    throw new Error(`snapshot_http_${response.status}`);
+                }
+
+                const payload = await response.json();
+                currentBufnr = String(payload.bufnr || resolvedBufnr);
+                filename = payload.filename || "buffer";
+                setFilename(filename);
+                clearPendingRender();
+                installHtml(payload.html || "<article id=\"md-root\"></article>");
+                followCursorLine(payload.cursor_line, true, true);
+                setStatus("Connected");
+            }
+
+            function connectEvents() {
+                if (!currentBufnr) {
+                    return;
+                }
+
+                if (source) {
+                    source.close();
+                }
+
+                source = new EventSource(`/events?buf=${encodeURIComponent(currentBufnr)}`);
+
+                source.addEventListener("render_full", (event) => {
+                    const payload = readPayload(event);
+                    if (!payload) {
+                        return;
+                    }
+
+                    queueRenderPayload(payload);
+                });
+
+                source.addEventListener("cursor_move", (event) => {
+                    const payload = readPayload(event);
+                    if (!payload) {
+                        return;
+                    }
+                    followCursorLine(payload.line, false, false);
+                });
+
+                source.addEventListener("session_end", (event) => {
+                    const payload = readPayload(event);
+                    const reason = payload && payload.reason ? payload.reason : "stopped";
+                    clearPendingRender();
+                    showWarning(`Session ended: ${reason}`);
+                    setStatus("Session ended");
+                    if (source) {
+                        source.close();
+                        source = null;
+                    }
+                });
+
+                source.addEventListener("heartbeat", () => {
+                    setStatus("Live");
+                });
+
+                source.onerror = () => {
+                    clearPendingRender();
+                    if (source) {
+                        source.close();
+                        source = null;
+                    }
+
+                    setStatus("Disconnected - reconnecting...");
+                    setTimeout(async () => {
+                        try {
+                            await pollActiveBuffer();
+                            if (source) {
+                                return;
+                            }
+
+                            await loadSnapshot();
+                            connectEvents();
+                        } catch (_error) {
+                            setStatus("Waiting for active preview...");
+                            showWarning("No active preview session. Start with :LiveMarkdownStart.");
+                        }
+                    }, 800);
+                };
+            }
+
+            async function switchToBuffer(nextBufnr) {
+                if (!nextBufnr || String(nextBufnr) === String(currentBufnr)) {
+                    return;
+                }
+
+                currentBufnr = String(nextBufnr);
+                clearWarning();
+                setStatus("Switching...");
+
+                await loadSnapshot(currentBufnr);
                 connectEvents();
-              } catch (_error) {
-                setStatus("Waiting for active preview...");
-                showWarning("No active preview session. Start with :LiveMarkdownStart.");
-              }
-            }, 800);
-          };
-        }
-
-        async function switchToBuffer(nextBufnr) {
-          if (!nextBufnr || String(nextBufnr) === String(currentBufnr)) {
-            return;
-          }
-
-          currentBufnr = String(nextBufnr);
-          clearWarning();
-          setStatus("Switching...");
-
-          await loadSnapshot(currentBufnr);
-          connectEvents();
-        }
-
-        async function pollActiveBuffer() {
-          const activeBufnr = await getActiveBufnr();
-          if (!activeBufnr) {
-            return;
-          }
-
-          if (String(activeBufnr) === String(currentBufnr)) {
-            if (source) {
-              return;
             }
 
-            try {
-              await loadSnapshot(activeBufnr);
-              connectEvents();
-            } catch (_error) {
-              // Keep waiting for the next polling tick.
+            async function pollActiveBuffer() {
+                const activeBufnr = await getActiveBufnr();
+                if (!activeBufnr) {
+                    return;
+                }
+
+                if (String(activeBufnr) === String(currentBufnr)) {
+                    if (source) {
+                        return;
+                    }
+
+                    try {
+                        await loadSnapshot(activeBufnr);
+                        connectEvents();
+                    } catch (_error) {
+                        // Keep waiting for the next polling tick.
+                    }
+                    return;
+                }
+
+                try {
+                    await switchToBuffer(activeBufnr);
+                } catch (_error) {
+                    // Keep current preview when follow switch fails.
+                }
             }
-            return;
-          }
 
-          try {
-            await switchToBuffer(activeBufnr);
-          } catch (_error) {
-            // Keep current preview when follow switch fails.
-          }
-        }
+            function startActivePolling() {
+                if (activePollTimer !== null) {
+                    return;
+                }
 
-        function startActivePolling() {
-          if (activePollTimer !== null) {
-            return;
-          }
+                activePollTimer = window.setInterval(() => {
+                    void pollActiveBuffer();
+                }, 700);
+            }
 
-          activePollTimer = window.setInterval(() => {
-            void pollActiveBuffer();
-          }, 700);
-        }
+            function markManualScroll() {
+                manualScrollCooldownUntil = performance.now() + 220;
+                followTargetTop = getScrollTop();
+                stopFollowAnimation();
+            }
 
-        function markManualScroll() {
-          manualScrollCooldownUntil = performance.now() + 220;
-          followTargetTop = getScrollTop();
-          stopFollowAnimation();
-        }
+            window.addEventListener("wheel", markManualScroll, { passive: true });
+            window.addEventListener("touchmove", markManualScroll, { passive: true });
+            window.addEventListener("keydown", (event) => {
+                if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp"].includes(event.key)) {
+                    markManualScroll();
+                }
+            });
 
-        window.addEventListener("wheel", markManualScroll, { passive: true });
-        window.addEventListener("touchmove", markManualScroll, { passive: true });
-        window.addEventListener("keydown", (event) => {
-          if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp"].includes(event.key)) {
-            markManualScroll();
-          }
-        });
+            startActivePolling();
 
-        startActivePolling();
-
-        (async () => {
-          try {
-            await loadSnapshot();
-            connectEvents();
-            void pollActiveBuffer();
-          } catch (_error) {
-            setStatus("Waiting for active preview...");
-            showWarning("No active preview session. Start with :LiveMarkdownStart.");
-            void pollActiveBuffer();
-          }
+            (async () => {
+                try {
+                    await loadSnapshot();
+                    connectEvents();
+                    void pollActiveBuffer();
+                } catch (_error) {
+                    setStatus("Waiting for active preview...");
+                    showWarning("No active preview session. Start with :LiveMarkdownStart.");
+                    void pollActiveBuffer();
+                }
+            })();
         })();
-      })();
-    </script>
-  </body>
+        </script>
+    </body>
 </html>
