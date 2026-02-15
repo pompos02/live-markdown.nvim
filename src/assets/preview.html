@@ -40,7 +40,7 @@
       body {
         margin: 0;
         color: var(--text);
-        font-family: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
         font-size: 15px;
         background: var(--bg);
       }
@@ -216,7 +216,7 @@
       #md-root code,
       #md-root pre,
       #md-root .mono {
-        font-family: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
       }
 
       #md-root :not(pre) > code {
@@ -460,9 +460,8 @@
         let activePollTimer = null;
 
         const search = new URLSearchParams(window.location.search);
-        const initialBufnr = search.get("buf");
-        const followMode = ["1", "true", "yes", "on"].includes((search.get("follow") || "").toLowerCase());
-        let currentBufnr = initialBufnr;
+        const initialBufnr = (search.get("buf") || "").trim();
+        let currentBufnr = initialBufnr || null;
 
         const LANGUAGE_ALIASES = Object.freeze({
           rs: "rust",
@@ -520,12 +519,6 @@
         const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "haskell", "ada"]);
         const CASE_INSENSITIVE_KEYWORD_LANGUAGES = new Set(["sql"]);
 
-        if (!currentBufnr) {
-          setStatus("Missing buffer id");
-          showWarning("Preview URL is missing required query parameters.");
-          return;
-        }
-
         function setStatus(message) {
           statusLine.textContent = message;
         }
@@ -555,6 +548,32 @@
         function clearWarning() {
           warning.style.display = "none";
           warning.textContent = "";
+        }
+
+        async function getActiveBufnr() {
+          let response;
+          try {
+            response = await fetch("/active", { cache: "no-store" });
+          } catch (_error) {
+            return null;
+          }
+
+          if (!response.ok) {
+            return null;
+          }
+
+          let payload;
+          try {
+            payload = await response.json();
+          } catch (_error) {
+            return null;
+          }
+
+          if (!payload || payload.bufnr == null) {
+            return null;
+          }
+
+          return String(payload.bufnr);
         }
 
         function hasUrlScheme(value) {
@@ -616,6 +635,10 @@
 
             const normalizedPath = normalizeLocalAssetPath(rawSrc);
             if (!normalizedPath) {
+              continue;
+            }
+
+            if (!currentBufnr) {
               continue;
             }
 
@@ -1032,13 +1055,18 @@
         let filename = "buffer";
 
         async function loadSnapshot(targetBufnr = currentBufnr) {
-          const response = await fetch(`/snapshot?buf=${encodeURIComponent(targetBufnr)}`);
+          const resolvedBufnr = targetBufnr == null ? await getActiveBufnr() : String(targetBufnr);
+          if (!resolvedBufnr) {
+            throw new Error("snapshot_no_active_session");
+          }
+
+          const response = await fetch(`/snapshot?buf=${encodeURIComponent(resolvedBufnr)}`);
           if (!response.ok) {
             throw new Error(`snapshot_http_${response.status}`);
           }
 
           const payload = await response.json();
-          currentBufnr = String(payload.bufnr || targetBufnr);
+          currentBufnr = String(payload.bufnr || resolvedBufnr);
           filename = payload.filename || "buffer";
           setFilename(filename);
           installHtml(payload.html || "<article id=\"md-root\"></article>");
@@ -1047,6 +1075,10 @@
         }
 
         function connectEvents() {
+          if (!currentBufnr) {
+            return;
+          }
+
           if (source) {
             source.close();
           }
@@ -1097,13 +1129,16 @@
             setStatus("Disconnected - reconnecting...");
             setTimeout(async () => {
               try {
+                await pollActiveBuffer();
+                if (source) {
+                  return;
+                }
+
                 await loadSnapshot();
                 connectEvents();
               } catch (_error) {
-                setStatus("Reconnect failed - retrying...");
-                if (!followMode) {
-                  connectEvents();
-                }
+                setStatus("Waiting for active preview...");
+                showWarning("No active preview session. Start with :LiveMarkdownFollow.");
               }
             }, 800);
           };
@@ -1123,41 +1158,34 @@
         }
 
         async function pollActiveBuffer() {
-          if (!followMode) {
+          const activeBufnr = await getActiveBufnr();
+          if (!activeBufnr) {
             return;
           }
 
-          let response;
-          try {
-            response = await fetch("/active", { cache: "no-store" });
-          } catch (_error) {
-            return;
-          }
+          if (String(activeBufnr) === String(currentBufnr)) {
+            if (source) {
+              return;
+            }
 
-          if (!response.ok) {
-            return;
-          }
-
-          let payload;
-          try {
-            payload = await response.json();
-          } catch (_error) {
-            return;
-          }
-
-          if (!payload || payload.bufnr == null) {
+            try {
+              await loadSnapshot(activeBufnr);
+              connectEvents();
+            } catch (_error) {
+              // Keep waiting for the next polling tick.
+            }
             return;
           }
 
           try {
-            await switchToBuffer(payload.bufnr);
+            await switchToBuffer(activeBufnr);
           } catch (_error) {
             // Keep current preview when follow switch fails.
           }
         }
 
         function startActivePolling() {
-          if (!followMode || activePollTimer !== null) {
+          if (activePollTimer !== null) {
             return;
           }
 
@@ -1180,15 +1208,17 @@
           }
         });
 
+        startActivePolling();
+
         (async () => {
           try {
             await loadSnapshot();
             connectEvents();
-            startActivePolling();
             void pollActiveBuffer();
           } catch (_error) {
-            setStatus("Unable to load snapshot");
-            showWarning("Failed to fetch initial preview snapshot. Check buffer id and active session.");
+            setStatus("Waiting for active preview...");
+            showWarning("No active preview session. Start with :LiveMarkdownFollow.");
+            void pollActiveBuffer();
           }
         })();
       })();

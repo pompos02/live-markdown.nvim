@@ -15,10 +15,6 @@ function M.setup(opts)
     return core().setup(opts or {})
 end
 
-function M.start()
-    return core().start()
-end
-
 function M.stop(all)
     return core().stop(all)
 end
@@ -37,10 +33,6 @@ end
 
 function M.shutdown()
     return core().shutdown()
-end
-
-function M.start()
-    return core().follow()
 end
 
 return M

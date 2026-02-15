@@ -134,9 +134,9 @@ impl ServerController {
         self.runtime.lock().await.addr
     }
 
-    pub async fn preview_url_for(&self, bufnr: i64) -> Option<String> {
+    pub async fn preview_url(&self) -> Option<String> {
         let addr = self.bound_addr().await?;
-        Some(format!("http://{}:{}/?buf={bufnr}", addr.ip(), addr.port()))
+        Some(format!("http://{}:{}/", addr.ip(), addr.port()))
     }
 }
 

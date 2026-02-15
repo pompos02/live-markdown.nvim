@@ -11,7 +11,7 @@ Real-time Markdown preview for Neovim, powered by Rust.
 - Local image rendering from markdown-relative paths
 - Smooth auto-scroll cursor following
 - SSE updates with reconnect-safe snapshot flow
-- `:LiveMarkdownStart`, `:LiveMarkdownStop`, `:LiveMarkdownToggle`, `:LiveMarkdownOpen`, `:LiveMarkdownFollow`
+- `:LiveMarkdownFollow`, `:LiveMarkdownStop`, `:LiveMarkdownToggle`, `:LiveMarkdownOpen`
 
 ## Requirements
 
@@ -44,12 +44,11 @@ The repo comes bundled with the linux Binary, if you want to build it yourself r
 
 ## Commands
 
-- `:LiveMarkdownStart` - start preview for current buffer
 - `:LiveMarkdownStop` - stop preview for current buffer
 - `:LiveMarkdownStop!` - stop all active preview sessions
-- `:LiveMarkdownToggle` - toggle preview for current buffer
+- `:LiveMarkdownToggle` - toggle preview for current buffer (starts in follow mode)
 - `:LiveMarkdownOpen` - print current preview URL
-- `:LiveMarkdownFollow` - start preview and keep the browser synced to markdown buffer switches (non-markdown switches keep the last markdown preview visible)
+- `:LiveMarkdownFollow` - start preview and keep the browser synced to markdown buffer switches (default behavior)
 
 
 ## Development

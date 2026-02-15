@@ -1,5 +1,4 @@
 pub mod autocmd;
-pub mod commands;
 
 use crate::protocol::SessionEndReason;
 use crate::render::LiveMarkdownRenderer;
@@ -71,10 +70,9 @@ impl LiveMarkdownPlugin {
 
     pub async fn start_preview(&self, snapshot: BufferSnapshot) -> Result<String, PluginError> {
         let addr = self.server.ensure_running().await?;
-        let bufnr = snapshot.bufnr;
         self.sessions.start_session(snapshot, &self.renderer).await;
 
-        let url = format!("http://{}:{}/?buf={bufnr}", addr.ip(), addr.port(),);
+        let url = format!("http://{}:{}/", addr.ip(), addr.port(),);
 
         Ok(url)
     }
@@ -116,7 +114,7 @@ impl LiveMarkdownPlugin {
         }
 
         self.server.ensure_running().await?;
-        Ok(self.server.preview_url_for(bufnr).await)
+        Ok(self.server.preview_url().await)
     }
 
     pub async fn on_text_changed(&self, snapshot: BufferSnapshot) {

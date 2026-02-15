@@ -18,7 +18,6 @@ static CALLBACKS_REGISTERED: AtomicBool = AtomicBool::new(false);
 struct AppState {
     plugin: LiveMarkdownPlugin,
     runtime: Runtime,
-    follow_mode: AtomicBool,
 }
 
 impl AppState {
@@ -32,7 +31,6 @@ impl AppState {
         Ok(Self {
             plugin: LiveMarkdownPlugin::new(config),
             runtime,
-            follow_mode: AtomicBool::new(false),
         })
     }
 
@@ -48,18 +46,10 @@ impl AppState {
         self.runtime.block_on(self.plugin.has_session(bufnr))
     }
 
-    fn start_current(&self) -> std::result::Result<String, String> {
-        let buffer = api::get_current_buf();
-        if !is_markdown_buffer(&buffer) {
-            return Err(String::from(
-                "current buffer is not markdown (filetype or extension mismatch)",
-            ));
-        }
-
-        let snapshot = snapshot_from_buffer(&buffer)?;
+    fn has_active_previews(&self) -> bool {
         self.runtime
-            .block_on(self.plugin.start_preview(snapshot))
-            .map_err(|err| err.to_string())
+            .block_on(self.plugin.sessions().session_count())
+            > 0
     }
 
     fn follow_current(&self) -> std::result::Result<String, String> {
@@ -76,8 +66,7 @@ impl AppState {
             .block_on(self.plugin.start_preview(snapshot))
             .map_err(|err| err.to_string())?;
 
-        self.follow_mode.store(true, Ordering::Release);
-        Ok(format!("{url}&follow=1"))
+        Ok(url)
     }
 
     fn toggle_current(&self) -> std::result::Result<Option<String>, String> {
@@ -164,9 +153,10 @@ impl AppState {
             self.runtime.spawn(async move {
                 plugin.on_buf_enter(bufnr).await;
             });
+            return;
         }
 
-        if !self.follow_mode.load(Ordering::Acquire) || !is_markdown_buffer(&buffer) {
+        if !is_markdown_buffer(&buffer) || !self.has_active_previews() {
             return;
         }
 
@@ -207,7 +197,6 @@ impl AppState {
 pub fn module() -> Result<Dictionary> {
     Ok(Dictionary::from_iter([
         ("setup", Object::from(Function::from_fn(setup))),
-        ("start", Object::from(Function::from_fn(start))),
         ("stop", Object::from(Function::from_fn(stop))),
         ("toggle", Object::from(Function::from_fn(toggle))),
         ("open", Object::from(Function::from_fn(open))),
@@ -240,18 +229,6 @@ fn setup_impl(opts: Option<Dictionary>) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn start(_: ()) {
-    let Some(state) = state() else {
-        notify_err("[live-markdown.nvim] plugin is not configured");
-        return;
-    };
-
-    match state.start_current() {
-        Ok(url) => notify_info(&format!("[live-markdown.nvim] preview started: {url}")),
-        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
-    }
 }
 
 fn stop(all: Option<bool>) {
@@ -331,13 +308,6 @@ fn ensure_callbacks_registered() -> Result<()> {
 }
 
 fn register_commands() -> Result<()> {
-    let start_opts = CreateCommandOpts::builder()
-        .desc("Start markdown preview for current buffer")
-        .force(true)
-        .nargs(CommandNArgs::Zero)
-        .build();
-    api::create_user_command("LiveMarkdownStart", command_start, &start_opts)?;
-
     let stop_opts = CreateCommandOpts::builder()
         .bang(true)
         .desc("Stop markdown preview for current buffer or all with !")
@@ -417,10 +387,6 @@ fn register_autocmds() -> Result<()> {
     api::create_autocmd(["VimLeavePre"], &vimleave_opts)?;
 
     Ok(())
-}
-
-fn command_start(_: CommandArgs) {
-    start(());
 }
 
 fn command_stop(args: CommandArgs) {

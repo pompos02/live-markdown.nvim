@@ -1,5 +1,4 @@
 use live_markdown_native::plugin::LiveMarkdownPlugin;
-use live_markdown_native::plugin::commands::live_markdown_start;
 use live_markdown_native::server::ServerConfig;
 use live_markdown_native::session::BufferSnapshot;
 use std::env;
@@ -25,18 +24,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let plugin = LiveMarkdownPlugin::new(ServerConfig::default());
-    let url = live_markdown_start(
-        &plugin,
-        BufferSnapshot {
+    let url = plugin
+        .start_preview(BufferSnapshot {
             bufnr: 1,
             changedtick: 1,
             markdown,
             cursor_line: 1,
             cursor_col: 0,
             source_path,
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     println!("Markdown preview running at: {url}");
     println!("Press Ctrl+C to stop.");
