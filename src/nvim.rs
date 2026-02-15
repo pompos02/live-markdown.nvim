@@ -52,7 +52,7 @@ impl AppState {
             > 0
     }
 
-    fn follow_current(&self) -> std::result::Result<String, String> {
+    fn start_current(&self) -> std::result::Result<String, String> {
         let buffer = api::get_current_buf();
         if !is_markdown_buffer(&buffer) {
             return Err(String::from(
@@ -69,20 +69,6 @@ impl AppState {
         Ok(url)
     }
 
-    fn toggle_current(&self) -> std::result::Result<Option<String>, String> {
-        let buffer = api::get_current_buf();
-        if !is_markdown_buffer(&buffer) {
-            return Err(String::from(
-                "current buffer is not markdown (filetype or extension mismatch)",
-            ));
-        }
-
-        let snapshot = snapshot_from_buffer(&buffer)?;
-        self.runtime
-            .block_on(self.plugin.toggle_preview(snapshot))
-            .map_err(|err| err.to_string())
-    }
-
     fn stop_current(&self) -> std::result::Result<bool, String> {
         let bufnr = i64::from(api::get_current_buf().handle());
         self.runtime
@@ -90,7 +76,7 @@ impl AppState {
             .map_err(|err| err.to_string())
     }
 
-    fn open_current(&self) -> std::result::Result<Option<String>, String> {
+    fn show_url_current(&self) -> std::result::Result<Option<String>, String> {
         let bufnr = i64::from(api::get_current_buf().handle());
         self.runtime
             .block_on(self.plugin.open_preview(bufnr))
@@ -198,9 +184,8 @@ pub fn module() -> Result<Dictionary> {
     Ok(Dictionary::from_iter([
         ("setup", Object::from(Function::from_fn(setup))),
         ("stop", Object::from(Function::from_fn(stop))),
-        ("toggle", Object::from(Function::from_fn(toggle))),
-        ("open", Object::from(Function::from_fn(open))),
-        ("follow", Object::from(Function::from_fn(follow))),
+        ("show_url", Object::from(Function::from_fn(show_url))),
+        ("start", Object::from(Function::from_fn(start))),
         ("shutdown", Object::from(Function::from_fn(shutdown))),
     ]))
 }
@@ -250,39 +235,25 @@ fn stop(all: Option<bool>) {
     }
 }
 
-fn follow(_: ()) {
+fn start(_: ()) {
     let Some(state) = state() else {
         notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
-    match state.follow_current() {
-        Ok(url) => notify_info(&format!(
-            "[live-markdown.nvim] follow preview started: {url}"
-        )),
-        Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
-    }
-}
-fn toggle(_: ()) {
-    let Some(state) = state() else {
-        notify_err("[live-markdown.nvim] plugin is not configured");
-        return;
-    };
-
-    match state.toggle_current() {
-        Ok(Some(url)) => notify_info(&format!("[live-markdown.nvim] preview started: {url}")),
-        Ok(None) => notify_info("[live-markdown.nvim] preview stopped"),
+    match state.start_current() {
+        Ok(url) => notify_info(&format!("[live-markdown.nvim] preview started: {url}")),
         Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
     }
 }
 
-fn open(_: ()) {
+fn show_url(_: ()) {
     let Some(state) = state() else {
         notify_err("[live-markdown.nvim] plugin is not configured");
         return;
     };
 
-    match state.open_current() {
+    match state.show_url_current() {
         Ok(Some(url)) => notify_info(&format!("[live-markdown.nvim] preview URL: {url}")),
         Ok(None) => notify_info("[live-markdown.nvim] no active preview for current buffer"),
         Err(err) => notify_err(&format!("[live-markdown.nvim] {err}")),
@@ -316,26 +287,19 @@ fn register_commands() -> Result<()> {
         .build();
     api::create_user_command("LiveMarkdownStop", command_stop, &stop_opts)?;
 
-    let toggle_opts = CreateCommandOpts::builder()
-        .desc("Toggle markdown preview for current buffer")
-        .force(true)
-        .nargs(CommandNArgs::Zero)
-        .build();
-    api::create_user_command("LiveMarkdownToggle", command_toggle, &toggle_opts)?;
-
-    let open_opts = CreateCommandOpts::builder()
+    let show_url_opts = CreateCommandOpts::builder()
         .desc("Show markdown preview URL")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("LiveMarkdownOpen", command_open, &open_opts)?;
+    api::create_user_command("LiveMarkdownShowUrl", command_show_url, &show_url_opts)?;
 
-    let follow_opts = CreateCommandOpts::builder()
+    let start_opts = CreateCommandOpts::builder()
         .desc("Start markdown preview and follow buffer")
         .force(true)
         .nargs(CommandNArgs::Zero)
         .build();
-    api::create_user_command("LiveMarkdownFollow", command_follow, &follow_opts)?;
+    api::create_user_command("LiveMarkdownStart", command_start, &start_opts)?;
 
     Ok(())
 }
@@ -393,16 +357,12 @@ fn command_stop(args: CommandArgs) {
     stop(Some(args.bang));
 }
 
-fn command_toggle(_: CommandArgs) {
-    toggle(());
+fn command_show_url(_: CommandArgs) {
+    show_url(());
 }
 
-fn command_open(_: CommandArgs) {
-    open(());
-}
-
-fn command_follow(_: CommandArgs) {
-    follow(());
+fn command_start(_: CommandArgs) {
+    start(());
 }
 
 fn autocmd_text_changed(args: AutocmdCallbackArgs) -> bool {

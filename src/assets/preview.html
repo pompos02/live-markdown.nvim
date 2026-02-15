@@ -1142,7 +1142,7 @@
                 connectEvents();
               } catch (_error) {
                 setStatus("Waiting for active preview...");
-                showWarning("No active preview session. Start with :LiveMarkdownFollow.");
+                showWarning("No active preview session. Start with :LiveMarkdownStart.");
               }
             }, 800);
           };
@@ -1221,7 +1221,7 @@
             void pollActiveBuffer();
           } catch (_error) {
             setStatus("Waiting for active preview...");
-            showWarning("No active preview session. Start with :LiveMarkdownFollow.");
+            showWarning("No active preview session. Start with :LiveMarkdownStart.");
             void pollActiveBuffer();
           }
         })();

@@ -96,18 +96,6 @@ impl LiveMarkdownPlugin {
         self.server.stop().await;
     }
 
-    pub async fn toggle_preview(
-        &self,
-        snapshot: BufferSnapshot,
-    ) -> Result<Option<String>, PluginError> {
-        if self.sessions.has_session(snapshot.bufnr).await {
-            let _ = self.stop_preview(snapshot.bufnr).await?;
-            return Ok(None);
-        }
-
-        self.start_preview(snapshot).await.map(Some)
-    }
-
     pub async fn open_preview(&self, bufnr: i64) -> Result<Option<String>, PluginError> {
         if !self.sessions.has_session(bufnr).await {
             return Ok(None);
@@ -171,7 +159,7 @@ mod tests {
     use crate::session::BufferSnapshot;
 
     #[tokio::test]
-    async fn toggle_starts_and_stops_session() {
+    async fn start_then_stop_session() {
         let plugin = LiveMarkdownPlugin::new(ServerConfig::default());
 
         let buffer = BufferSnapshot {
@@ -184,12 +172,15 @@ mod tests {
         };
 
         let started = plugin
-            .toggle_preview(buffer.clone())
+            .start_preview(buffer.clone())
             .await
             .expect("start preview");
-        assert!(started.is_some());
+        assert!(!started.is_empty());
 
-        let stopped = plugin.toggle_preview(buffer).await.expect("stop preview");
-        assert!(stopped.is_none());
+        let stopped = plugin
+            .stop_preview(buffer.bufnr)
+            .await
+            .expect("stop preview");
+        assert!(stopped);
     }
 }

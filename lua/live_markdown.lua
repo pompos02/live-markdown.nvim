@@ -19,16 +19,12 @@ function M.stop(all)
     return core().stop(all)
 end
 
-function M.toggle()
-    return core().toggle()
+function M.show_url()
+    return core().show_url()
 end
 
-function M.open()
-    return core().open()
-end
-
-function M.follow()
-    return core().follow()
+function M.start()
+    return core().start()
 end
 
 function M.shutdown()
