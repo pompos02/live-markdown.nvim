@@ -40,7 +40,7 @@
         body {
             margin: 0;
             color: var(--text);
-            font-family: "IosevkaCustom Nerd Font Mono", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
+            font-family: Inter, "IosevkaCustom Nerd Font Mono", "Segoe UI Variable Text", "Segoe UI", "Berkeley Mono", Consolas, "Fira Code", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular", monospace;
             font-size: 15px;
             background: var(--bg);
         }
@@ -100,7 +100,7 @@
         }
 
         #md-root [data-line] {
-            border-radius: 3px;
+            border-radius: 0px !important;
             transition: background-color 90ms linear, box-shadow 90ms linear;
         }
 
@@ -141,8 +141,17 @@
         #md-root blockquote {
             border-left: 2px solid var(--accent);
             margin: 0 0 1em;
-            padding: 0.2em 0 0.2em 0.9em;
+            padding: 0 0 0 0.9em;
             color: #aaaaaa;
+            border-radius: 0;
+        }
+
+        #md-root blockquote > :first-child {
+            margin-top: 0;
+        }
+
+        #md-root blockquote > :last-child {
+            margin-bottom: 0;
         }
 
         #md-root .markdown-alert {
@@ -313,6 +322,8 @@
             color: var(--text-strong);
             text-align: left;
             letter-spacing: 0.02em;
+            font-weight: 700;
+            text-decoration: underline;
         }
 
         #md-root td {
